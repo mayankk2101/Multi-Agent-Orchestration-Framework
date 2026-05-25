@@ -9,7 +9,7 @@ const app = express();
 
 app.use(cors());
 
-// Health check
+// Health check (before proxy routes)
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -18,79 +18,32 @@ app.get('/health', (req, res) => {
   });
 });
 
-const toServiceApiPath = (path: string) => `/api/v1${path}`;
-const toAuthServiceApiPath = (path: string) => `/api/v1/auth${path}`;
-
-// Route to Auth Service
-app.use('/api/v1/auth', createProxyMiddleware({
+// Proxy middleware functions
+const createAuthProxy = () => createProxyMiddleware({
   target: 'http://localhost:3001',
   changeOrigin: true,
-  pathRewrite: toAuthServiceApiPath
-}));
+  pathRewrite: { '^/api/v1/auth': '' }
+});
 
-// Route to CRM Service
-app.use('/api/v1/crm', createProxyMiddleware({
-  target: 'http://localhost:3020',
+const createServiceProxy = (port) => createProxyMiddleware({
+  target: `http://localhost:${port}`,
   changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
+  pathRewrite: { '^/api/v1/[^/]+': '' }
+});
 
-// Route to HR Service
-app.use('/api/v1/hr', createProxyMiddleware({
-  target: 'http://localhost:3003',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
+// Routes (BEFORE express.json())
+app.use('/api/v1/auth', createAuthProxy());
+app.use('/api/v1/crm', createServiceProxy(3020));
+app.use('/api/v1/hr', createServiceProxy(3003));
+app.use('/api/v1/quality', createServiceProxy(3004));
+app.use('/api/v1/calendar', createServiceProxy(3005));
+app.use('/api/v1/staffing', createServiceProxy(3006));
+app.use('/api/v1/notifications', createServiceProxy(3007));
+app.use('/api/v1/geo', createServiceProxy(3008));
+app.use('/api/v1/chatbot', createServiceProxy(3009));
+app.use('/api/v1/analytics', createServiceProxy(3010));
 
-// Route to Quality Service
-app.use('/api/v1/quality', createProxyMiddleware({
-  target: 'http://localhost:3004',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
-// Route to Calendar Service
-app.use('/api/v1/calendar', createProxyMiddleware({
-  target: 'http://localhost:3005',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
-// Route to Staffing Service
-app.use('/api/v1/staffing', createProxyMiddleware({
-  target: 'http://localhost:3006',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
-// Route to Notifications Service
-app.use('/api/v1/notifications', createProxyMiddleware({
-  target: 'http://localhost:3007',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
-// Route to Geo Service
-app.use('/api/v1/geo', createProxyMiddleware({
-  target: 'http://localhost:3008',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
-// Route to Chatbot Service
-app.use('/api/v1/chatbot', createProxyMiddleware({
-  target: 'http://localhost:3009',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
-// Route to Analytics Service
-app.use('/api/v1/analytics', createProxyMiddleware({
-  target: 'http://localhost:3010',
-  changeOrigin: true,
-  pathRewrite: toServiceApiPath
-}));
-
+// Middleware (AFTER proxy routes)
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
