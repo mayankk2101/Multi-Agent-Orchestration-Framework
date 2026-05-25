@@ -1,18 +1,9 @@
 {
   "name": "hotel-crm-mvp",
   "version": "1.0.0",
-  "description": "Hotel Management CRM - Production Grade MVP",
+  "description": "Hotel Management CRM",
   "private": true,
-  "workspaces": [
-    "backend/services/*",
-    "backend/shared",
-    "frontend",
-    "mobile/*"
-  ],
   "scripts": {
-    "dev": "npm run dev --workspaces",
-    "build": "npm run build --workspaces",
-    "test": "npm test --workspaces",
-    "lint": "npm run lint --workspaces"
+    "test:readiness": "node scripts/system-readiness-check.mjs"
   }
 }

@@ -1,0 +1,19 @@
+{
+  "name": "@hotel-crm/shared",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.0",
+    "zod": "^3.12.0",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
+  }
+}
