@@ -9,7 +9,7 @@ const app = express();
 
 app.use(cors());
 
-// Health check (before proxy routes)
+// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -18,33 +18,80 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Proxy middleware functions
-const createAuthProxy = () => createProxyMiddleware({
-  target: 'http://localhost:3001',
-  changeOrigin: true,
-  pathRewrite: { '^/api/v1/auth': '' }
-});
-
-const createServiceProxy = (port) => createProxyMiddleware({
-  target: `http://localhost:${port}`,
-  changeOrigin: true,
-  pathRewrite: { '^/api/v1/[^/]+': '' }
-});
+const rewriteMountedPath = (downstreamBasePath: string) => (path: string) => {
+  const suffix = path === '/' ? '' : path;
+  return `${downstreamBasePath}${suffix}`;
+};
 
 // Routes (BEFORE express.json())
-app.use('/api/v1/auth', createAuthProxy());
-app.use('/api/v1/crm', createServiceProxy(3020));
-app.use('/api/v1/hr', createServiceProxy(3003));
-app.use('/api/v1/quality', createServiceProxy(3004));
-app.use('/api/v1/calendar', createServiceProxy(3005));
-app.use('/api/v1/staffing', createServiceProxy(3006));
-app.use('/api/v1/notifications', createServiceProxy(3007));
-app.use('/api/v1/geo', createServiceProxy(3008));
-app.use('/api/v1/chatbot', createServiceProxy(3009));
-app.use('/api/v1/analytics', createServiceProxy(3010));
+app.use('/api/v1/auth', createProxyMiddleware({
+  target: 'http://localhost:3001',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1/auth')
+}));
+
+app.use('/api/v1/crm', createProxyMiddleware({
+  target: 'http://localhost:3020',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/hr', createProxyMiddleware({
+  target: 'http://localhost:3003',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/quality', createProxyMiddleware({
+  target: 'http://localhost:3004',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/calendar', createProxyMiddleware({
+  target: 'http://localhost:3005',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/staffing', createProxyMiddleware({
+  target: 'http://localhost:3006',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/notifications', createProxyMiddleware({
+  target: 'http://localhost:3007',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/geo', createProxyMiddleware({
+  target: 'http://localhost:3008',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/chatbot', createProxyMiddleware({
+  target: 'http://localhost:3009',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1')
+}));
+
+app.use('/api/v1/analytics', createProxyMiddleware({
+  target: 'http://localhost:3010',
+  changeOrigin: true,
+  pathRewrite: rewriteMountedPath('/api/v1/analytics')
+}));
 
 // Middleware (AFTER proxy routes)
 app.use(express.json());
+
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
