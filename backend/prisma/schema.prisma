@@ -1,0 +1,529 @@
+// Hotel CRM - Modular Monolith MVP
+// Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// AUTH MODULE
+// ============================================
+
+model User {
+  id                    String   @id @default(cuid())
+  email                 String   @unique
+  password_hash         String
+  first_name            String
+  last_name             String
+  phone                 String?
+  profile_photo_url     String?
+  role                  UserRole @default(WORKER)
+  hotel_ids             String[] // Array of hotel IDs manager has access to
+  permissions           String[] // Array of permission codes
+  is_active             Boolean  @default(true)
+  deleted_at            DateTime?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  // Relations
+  sessions              Session[]
+  created_tasks         Task[]            @relation("created_by")
+  assigned_tasks        Task[]            @relation("assigned_to")
+  verifications         QualityVerification[]
+  ratings               Rating[]
+  contracts             Contract[]        @relation("worker_contract")
+  created_contracts     Contract[]        @relation("created_contract")
+  uploaded_documents    WorkerDocument[]  @relation("uploaded_by")
+  payroll_records       Payroll[]
+  work_assignments      WorkerAssignment[]
+  created_work_requests WorkRequest[]
+  assigned_work_requests WorkRequest[]    @relation("assigned_by")
+  created_operations    DailyOperation[]  @relation("created_by")
+  notifications         Notification[]
+  audit_logs            AuditLog[]
+
+  @@index([role])
+  @@index([is_active])
+  @@index([deleted_at])
+}
+
+enum UserRole {
+  WORKER
+  CHECKER
+  MANAGER
+  ADMIN
+}
+
+model Session {
+  id          String   @id @default(cuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  refresh_token String
+  expires_at  DateTime
+  created_at  DateTime @default(now())
+
+  @@index([user_id])
+  @@index([expires_at])
+}
+
+// ============================================
+// CRM MODULE - Hotels, Rooms, Tasks
+// ============================================
+
+model Hotel {
+  id          String   @id @default(cuid())
+  name        String
+  city        String
+  country     String   @default("Germany")
+  address     String
+  timezone    String   @default("Europe/Berlin")
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relations
+  rooms               Room[]
+  tasks               Task[]
+  daily_operations    DailyOperation[]
+  work_requests       WorkRequest[]
+  contracts           Contract[]
+  documents           WorkerDocument[]
+  payroll_records     Payroll[]
+  verifications       QualityVerification[]
+  ratings             Rating[]
+
+  @@index([country])
+  @@index([is_active])
+}
+
+model Room {
+  id          String   @id @default(cuid())
+  hotel_id    String
+  hotel       Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  number      String
+  type        String   // "single", "double", "suite"
+  status      String   @default("clean") // "clean", "dirty", "occupied", "maintenance"
+  notes       String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // Relations
+  tasks       Task[]
+  daily_operations DailyOperation[]
+
+  @@unique([hotel_id, number])
+  @@index([hotel_id])
+  @@index([status])
+}
+
+model Task {
+  id                    String   @id @default(cuid())
+  hotel_id              String
+  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  room_id               String
+  room                  Room     @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  assigned_to_worker_id String
+  assigned_to_worker    User     @relation("assigned_to", fields: [assigned_to_worker_id], references: [id])
+  created_by_manager_id String
+  created_by            User     @relation("created_by", fields: [created_by_manager_id], references: [id])
+  description           String
+  priority              String   @default("medium") // "low", "medium", "high"
+  status                TaskStatus @default(ASSIGNED)
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  started_at            DateTime?
+  completed_at          DateTime?
+
+  // Relations
+  photos                TaskPhoto[]
+  quality_verification  QualityVerification?
+  rating                Rating?
+
+  @@index([hotel_id])
+  @@index([room_id])
+  @@index([assigned_to_worker_id])
+  @@index([status])
+  @@index([created_at])
+}
+
+enum TaskStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model TaskPhoto {
+  id            String   @id @default(cuid())
+  task_id       String
+  task          Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  url           String   // DO Spaces URL
+  description   String?
+  file_size     Int
+  mime_type     String
+  created_at    DateTime @default(now())
+
+  @@index([task_id])
+}
+
+// ============================================
+// QUALITY MODULE
+// ============================================
+
+model QualityVerification {
+  id              String   @id @default(cuid())
+  task_id         String   @unique
+  task            Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  hotel_id        String
+  hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  verified_by_checker_id String
+  verified_by     User     @relation(fields: [verified_by_checker_id], references: [id])
+  score           Int      // 0-100
+  notes           String?
+  status          String   @default("verified") // "verified", "needs_rework"
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([task_id])
+  @@index([hotel_id])
+  @@index([verified_by_checker_id])
+}
+
+model Rating {
+  id              String   @id @default(cuid())
+  task_id         String   @unique
+  task            Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  hotel_id        String
+  hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  worker_id       String
+  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  rated_by_checker_id String
+  rated_by        User     @relation(fields: [rated_by_checker_id], references: [id], name: "user_ratings")
+  score           Int      // 0-5 stars
+  comment         String?
+  created_at      DateTime @default(now())
+
+  @@index([hotel_id])
+  @@index([worker_id])
+  @@index([created_at])
+}
+
+model WorkerOverallRating {
+  id              String   @id @default(cuid())
+  worker_id       String   @unique
+  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  average_score   Float    // Aggregate of all ratings
+  total_ratings   Int      @default(0)
+  updated_at      DateTime @updatedAt
+
+  @@index([worker_id])
+}
+
+// ============================================
+// HR MODULE
+// ============================================
+
+model Contract {
+  id                    String   @id @default(cuid())
+  worker_id             String
+  worker                User     @relation("worker_contract", fields: [worker_id], references: [id], onDelete: Cascade)
+  hotel_id              String
+  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  contract_template_id  String
+  template              ContractTemplate @relation(fields: [contract_template_id], references: [id])
+  created_by_manager_id String
+  created_by            User     @relation("created_contract", fields: [created_by_manager_id], references: [id])
+  contract_number       String   @unique
+  start_date            DateTime
+  end_date              DateTime?
+  employment_type       String   @default("permanent") // "permanent", "seasonal", "temporary", "freelance"
+  position              String
+  salary_amount         Decimal  @db.Decimal(10, 2)
+  salary_currency       String   @default("EUR")
+  status                String   @default("active") // "draft", "signed", "active", "expired", "terminated"
+  document_url          String?  // Encrypted PDF URL in DO Spaces
+  document_hash         String?  // SHA-256 for integrity
+  signed_at             DateTime?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+  deleted_at            DateTime? // Soft delete for GDPR
+
+  // Relations
+  line_items            ContractLineItem[]
+
+  @@index([worker_id])
+  @@index([hotel_id])
+  @@index([status])
+  @@index([deleted_at])
+}
+
+model ContractTemplate {
+  id              String   @id @default(cuid())
+  hotel_id        String
+  hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  template_content String  // HTML template
+  required_fields Json    // { "salary": "required", "end_date": "optional" }
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  // Relations
+  contracts       Contract[]
+
+  @@index([hotel_id])
+}
+
+model ContractLineItem {
+  id          String   @id @default(cuid())
+  contract_id String
+  contract    Contract @relation(fields: [contract_id], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  item_type   String   // "salary", "bonus", "deduction"
+  created_at  DateTime @default(now())
+
+  @@index([contract_id])
+}
+
+model WorkerDocument {
+  id                    String   @id @default(cuid())
+  worker_id             String
+  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  hotel_id              String
+  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  document_type         String   // "passport", "visa", "work_permit", etc
+  document_name         String
+  document_url          String   // Encrypted in DO Spaces
+  document_hash         String?  // SHA-256
+  file_size             Int
+  file_mime_type        String
+  expiry_date           DateTime?
+  uploaded_by_manager_id String?
+  uploaded_by           User?    @relation(fields: [uploaded_by_manager_id], references: [id], name: "uploaded_by")
+  alert_sent_at         DateTime?
+  created_at            DateTime @default(now())
+  deleted_at            DateTime? // Soft delete for GDPR
+
+  @@index([worker_id])
+  @@index([hotel_id])
+  @@index([document_type])
+  @@index([expiry_date])
+  @@index([deleted_at])
+}
+
+model RequiredDocument {
+  id                String   @id @default(cuid())
+  hotel_id          String
+  hotel             Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  document_type     String
+  is_required       Boolean  @default(true)
+  renewal_frequency_days Int?
+  created_at        DateTime @default(now())
+
+  @@unique([hotel_id, document_type])
+  @@index([hotel_id])
+}
+
+model Payroll {
+  id                String   @id @default(cuid())
+  worker_id         String
+  worker            User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  hotel_id          String
+  hotel             Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  pay_period_start  DateTime
+  pay_period_end    DateTime
+  gross_salary      Decimal  @db.Decimal(10, 2)
+  gross_currency    String   @default("EUR")
+  status            String   @default("draft") // "draft", "calculated", "approved", "paid", "archived"
+  encrypted_data    Bytes?   // All sensitive data encrypted AES-256
+  encryption_key_id String?  // Reference to encryption key (not actual key)
+  created_at        DateTime @default(now())
+  paid_at           DateTime?
+  updated_at        DateTime @updatedAt
+
+  // Relations
+  line_items        PayrollLineItem[]
+
+  @@unique([worker_id, pay_period_start, pay_period_end])
+  @@index([worker_id])
+  @@index([hotel_id])
+  @@index([status])
+  @@index([paid_at])
+}
+
+model PayrollLineItem {
+  id          String   @id @default(cuid())
+  payroll_id  String
+  payroll     Payroll  @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  amount_type String   // "gross", "deduction", "addition"
+  created_at  DateTime @default(now())
+
+  @@index([payroll_id])
+}
+
+model DataRetentionLog {
+  id                    String   @id @default(cuid())
+  worker_id             String
+  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  data_category         String   // "CONTRACT", "PAYROLL", "DOCUMENTS", etc
+  hire_date             DateTime
+  retention_end_date    DateTime // When data MUST be deleted
+  retention_years       Int      // 3 for contracts, 7 for payroll, etc
+  status                String   @default("PENDING") // "PENDING", "REMINDER_SENT", "DELETED", "EXCEPTION"
+  reminder_sent_at      DateTime?
+  deleted_at            DateTime?
+  deletion_reason       String?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@index([worker_id])
+  @@index([retention_end_date])
+  @@index([status])
+}
+
+// ============================================
+// STAFFING MODULE
+// ============================================
+
+model WorkRequest {
+  id                    String   @id @default(cuid())
+  hotel_id              String
+  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  created_by_manager_id String
+  created_by            User     @relation(fields: [created_by_manager_id], references: [id])
+  position              String   // "cleaner", "checker", "housekeeper"
+  workers_needed        Int
+  shift_date            DateTime
+  shift_start_time      String   // HH:MM format
+  shift_end_time        String   // HH:MM format
+  notes                 String?
+  status                String   @default("OPEN") // "OPEN", "PARTIALLY_FILLED", "FILLED", "CANCELLED"
+  created_at            DateTime @default(now())
+  filled_at             DateTime?
+  cancelled_at          DateTime?
+
+  // Relations
+  assignments           WorkerAssignment[]
+
+  @@index([hotel_id])
+  @@index([created_by_manager_id])
+  @@index([status])
+  @@index([shift_date])
+}
+
+model WorkerAssignment {
+  id                    String   @id @default(cuid())
+  worker_id             String
+  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  work_request_id       String
+  work_request          WorkRequest @relation(fields: [work_request_id], references: [id], onDelete: Cascade)
+  assigned_by_manager_id String
+  assigned_by           User     @relation(fields: [assigned_by_manager_id], references: [id], name: "assigned_by")
+  status                String   @default("ASSIGNED") // "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "REASSIGNED"
+  assigned_at           DateTime @default(now())
+  started_at            DateTime?
+  completed_at          DateTime?
+  previous_assignment_id String? // For reassignments
+  reassigned_at         DateTime?
+
+  // Relations
+  daily_operations      DailyOperation[]
+
+  @@unique([ worker_id, status], where: { status: { in: ["ASSIGNED", "IN_PROGRESS"] } })
+  @@index([worker_id])
+  @@index([work_request_id])
+  @@index([status])
+  @@index([assigned_at])
+}
+
+model DailyOperation {
+  id                    String   @id @default(cuid())
+  worker_assignment_id  String
+  worker_assignment     WorkerAssignment @relation(fields: [worker_assignment_id], references: [id], onDelete: Cascade)
+  hotel_id              String
+  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  room_id               String
+  room                  Room     @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  room_type             String?  // "single", "double", "suite"
+  tasks                 String?  // "change linens, clean bathroom, restock amenities"
+  status                String   @default("ASSIGNED") // "ASSIGNED", "IN_PROGRESS", "COMPLETED"
+  assigned_at           DateTime @default(now())
+  started_at            DateTime?
+  completed_at          DateTime?
+  created_by_manager_id String?
+  created_by            User?    @relation("created_by", fields: [created_by_manager_id], references: [id])
+
+  @@index([worker_assignment_id])
+  @@index([hotel_id])
+  @@index([room_id])
+  @@index([status])
+}
+
+// ============================================
+// NOTIFICATIONS MODULE
+// ============================================
+
+model Notification {
+  id          String   @id @default(cuid())
+  user_id     String
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  type        String   // "TASK_ASSIGNED", "QUALITY_VERIFIED", "RATING_RECEIVED", etc
+  title       String
+  message     String
+  data        Json?    // Additional data (IDs, etc)
+  is_read     Boolean  @default(false)
+  read_at     DateTime?
+  created_at  DateTime @default(now())
+
+  @@index([user_id])
+  @@index([is_read])
+  @@index([created_at])
+}
+
+// ============================================
+// COMPLIANCE MODULE
+// ============================================
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actor_id      String?
+  actor         User?    @relation(fields: [actor_id], references: [id], onDelete: SetNull)
+  actor_role    String?  // "worker", "manager", "checker", "admin"
+  action        String   // "VIEW", "DOWNLOAD", "EXPORT", "DELETE", "MODIFY"
+  resource_id   String
+  resource_type String   // "CONTRACT", "PAYROLL", "DOCUMENT", "WORKER", etc
+  details       Json?
+  ip_address    String?
+  timestamp     DateTime @default(now())
+
+  @@index([actor_id])
+  @@index([action])
+  @@index([resource_type])
+  @@index([resource_id])
+  @@index([timestamp])
+}
+
+model ConsentLog {
+  id              String   @id @default(cuid())
+  user_id         String
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  consent_type    String   // "PRIVACY_POLICY", "HR_DATA_PROCESSING", "PHOTO_STORAGE"
+  consent_given   Boolean
+  consent_version String   // "v1.0", "v1.1"
+  ip_address      String?
+  user_agent      String?
+  consent_source  String   // "web", "mobile", "in_person"
+  timestamp       DateTime @default(now())
+
+  @@index([user_id])
+  @@index([consent_type])
+  @@index([timestamp])
+}

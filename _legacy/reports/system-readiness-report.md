@@ -1,18 +1,16 @@
 # System Readiness Report
 
-Generated: 2026-05-26T07:27:13.947Z
+Generated: 2026-05-27T11:08:25.361Z
 
 ## Summary
 
-- Passing checks: 23
+- Passing checks: 0
 - Warnings: 12
-- Failures: 13
-- Skipped: 0
+- Failures: 5
+- Skipped: 11
 
 ## What Is Working Well
 
-- Auth Service and API Gateway health endpoints are responding.
-- Most Node services can be started by the readiness harness and respond on `/health`.
 
 ## What Needs Fixing
 
@@ -40,18 +38,10 @@ Generated: 2026-05-26T07:27:13.947Z
 ## Priority Fixes
 
 - P0: Database / Supabase REST connectivity: HTTP 401
-- P0: API Gateway routing / auth-service: POST /api/v1/auth/signup -> HTTP 404
-- P0: API Gateway routing / crm-service: GET /api/v1/crm/hotels -> HTTP 404
-- P0: API Gateway routing / hr-service: GET /api/v1/hr/contracts -> HTTP 404
-- P0: API Gateway routing / quality-service: POST /api/v1/quality/ratings -> HTTP 404
-- P0: API Gateway routing / calendar-service: GET /api/v1/calendar/schedules -> HTTP 404
-- P0: API Gateway routing / staffing-service: POST /api/v1/staffing/work-requests -> HTTP 404
-- P0: API Gateway routing / notifications-service: POST /api/v1/notifications/notifications -> HTTP 404
-- P0: API Gateway routing / geo-service: POST /api/v1/geo/locations -> HTTP 404
-- P0: API Gateway routing / chatbot-service: POST /api/v1/chatbot/chat -> HTTP 404
-- P0: API Gateway routing / analytics-service: GET /api/v1/analytics -> HTTP 404
+- P0: API Gateway routing / gateway unavailable: connect ECONNREFUSED 127.0.0.1:3000
 - P1: Docker / compose ps: failed to connect to the docker API at unix:///Users/mayankmalhotra/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/mayankmalhotra/.docker/run/docker.sock: connect: no such file or directory
 - P1: Redis / PING: Could not connect to Redis at localhost:6379: Connection refused
+- P1: Frontend / API configuration: http://localhost:3000/health -> HTTP undefined
 - P2: Static config / auth-service compose entry: missing from docker-compose.yml
 - P2: Static config / crm-service compose entry: missing from docker-compose.yml
 - P2: Static config / hr-service compose entry: missing from docker-compose.yml
@@ -82,39 +72,19 @@ Generated: 2026-05-26T07:27:13.947Z
 | FAIL | Docker | compose ps | failed to connect to the docker API at unix:///Users/mayankmalhotra/.docker/run/docker.sock; check if the path is correct and if the daemon is running: dial unix /Users/mayankmalhotra/.docker/run/docker.sock: connect: no such file or directory | P1 |
 | FAIL | Redis | PING | Could not connect to Redis at localhost:6379: Connection refused | P1 |
 | FAIL | Database | Supabase REST connectivity | HTTP 401 | P0 |
-| PASS | Service startup | auth-service | started on port 3001 |  |
-| PASS | Health endpoint | auth-service | HTTP 200 |  |
-| PASS | Service startup | crm-service | started on port 3020 |  |
-| PASS | Health endpoint | crm-service | HTTP 200 |  |
-| PASS | Service startup | hr-service | started on port 3003 |  |
-| PASS | Health endpoint | hr-service | HTTP 200 |  |
-| PASS | Service startup | quality-service | started on port 3004 |  |
-| PASS | Health endpoint | quality-service | HTTP 200 |  |
-| PASS | Service startup | calendar-service | started on port 3005 |  |
-| PASS | Health endpoint | calendar-service | HTTP 200 |  |
-| PASS | Service startup | staffing-service | started on port 3006 |  |
-| PASS | Health endpoint | staffing-service | HTTP 200 |  |
-| PASS | Service startup | notifications-service | started on port 3007 |  |
-| PASS | Health endpoint | notifications-service | HTTP 200 |  |
-| PASS | Service startup | geo-service | started on port 3008 |  |
-| PASS | Health endpoint | geo-service | HTTP 200 |  |
-| PASS | Service startup | chatbot-service | started on port 3009 |  |
-| PASS | Health endpoint | chatbot-service | HTTP 200 |  |
-| PASS | Service startup | analytics-service | started on port 3010 |  |
-| PASS | Health endpoint | analytics-service | HTTP 200 |  |
-| PASS | Service startup | api-gateway | port 3000 already open |  |
-| PASS | Health endpoint | api-gateway | HTTP 200 |  |
-| FAIL | API Gateway routing | auth-service | POST /api/v1/auth/signup -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | crm-service | GET /api/v1/crm/hotels -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | hr-service | GET /api/v1/hr/contracts -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | quality-service | POST /api/v1/quality/ratings -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | calendar-service | GET /api/v1/calendar/schedules -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | staffing-service | POST /api/v1/staffing/work-requests -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | notifications-service | POST /api/v1/notifications/notifications -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | geo-service | POST /api/v1/geo/locations -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | chatbot-service | POST /api/v1/chatbot/chat -> HTTP 404 | P0 |
-| FAIL | API Gateway routing | analytics-service | GET /api/v1/analytics -> HTTP 404 | P0 |
-| PASS | Frontend | API configuration | http://localhost:3000/health -> HTTP 200 |  |
+| SKIP | Service startup | auth-service | not running and --no-start was used |  |
+| SKIP | Service startup | crm-service | not running and --no-start was used |  |
+| SKIP | Service startup | hr-service | not running and --no-start was used |  |
+| SKIP | Service startup | quality-service | not running and --no-start was used |  |
+| SKIP | Service startup | calendar-service | not running and --no-start was used |  |
+| SKIP | Service startup | staffing-service | not running and --no-start was used |  |
+| SKIP | Service startup | notifications-service | not running and --no-start was used |  |
+| SKIP | Service startup | geo-service | not running and --no-start was used |  |
+| SKIP | Service startup | chatbot-service | not running and --no-start was used |  |
+| SKIP | Service startup | analytics-service | not running and --no-start was used |  |
+| SKIP | Service startup | api-gateway | not running and --no-start was used |  |
+| FAIL | API Gateway routing | gateway unavailable | connect ECONNREFUSED 127.0.0.1:3000 | P0 |
+| FAIL | Frontend | API configuration | http://localhost:3000/health -> HTTP undefined | P1 |
 | WARN | Frontend | backend call implementation | app/page.tsx does not make backend API calls yet | P2 |
 | WARN | Frontend | runtime | http://127.0.0.1:3002/ -> connect ECONNREFUSED 127.0.0.1:3002 | P2 |
 

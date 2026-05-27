@@ -1,0 +1,129 @@
+import jwt from 'jsonwebtoken';
+import { getEnv } from '../config/env.js';
+import { logger } from './logger.js';
+
+export interface AccessTokenPayload {
+  sub: string; // user ID
+  email: string;
+  role: string;
+  hotel_ids: string[];
+  permissions: string[];
+  iat: number;
+  exp: number;
+}
+
+export interface RefreshTokenPayload {
+  sub: string; // user ID
+  type: 'refresh';
+  iat: number;
+  exp: number;
+}
+
+export interface JwtTokens {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number; // seconds
+}
+
+export function signAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): string {
+  const env = getEnv();
+  return jwt.sign(payload, env.JWT_SECRET, {
+    expiresIn: env.JWT_ACCESS_EXPIRY,
+    algorithm: 'HS256',
+  });
+}
+
+export function signRefreshToken(userId: string): string {
+  const env = getEnv();
+  return jwt.sign({ sub: userId, type: 'refresh' }, env.JWT_SECRET, {
+    expiresIn: env.JWT_REFRESH_EXPIRY,
+    algorithm: 'HS256',
+  });
+}
+
+export function signTokens(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): JwtTokens {
+  const env = getEnv();
+  const access_token = signAccessToken(payload);
+  const refresh_token = signRefreshToken(payload.sub);
+
+  // Calculate expiry in seconds (convert from human readable format)
+  const expiryStr = env.JWT_ACCESS_EXPIRY;
+  const expirySeconds = parseExpiryToSeconds(expiryStr);
+
+  return {
+    access_token,
+    refresh_token,
+    expires_in: expirySeconds,
+  };
+}
+
+export function verifyAccessToken(token: string): AccessTokenPayload | null {
+  const env = getEnv();
+
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET) as AccessTokenPayload;
+    return decoded;
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      logger.debug('Access token expired', { expiredAt: error.expiredAt });
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      logger.debug('Invalid access token', { message: error.message });
+    } else {
+      logger.error('Error verifying access token', { error });
+    }
+    return null;
+  }
+}
+
+export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
+  const env = getEnv();
+
+  try {
+    const decoded = jwt.verify(token, env.JWT_SECRET) as RefreshTokenPayload;
+    if (decoded.type !== 'refresh') {
+      return null;
+    }
+    return decoded;
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      logger.debug('Refresh token expired', { expiredAt: error.expiredAt });
+    } else if (error instanceof jwt.JsonWebTokenError) {
+      logger.debug('Invalid refresh token', { message: error.message });
+    } else {
+      logger.error('Error verifying refresh token', { error });
+    }
+    return null;
+  }
+}
+
+export function extractTokenFromHeader(authHeader: string | undefined): string | null {
+  if (!authHeader) return null;
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
+    return null;
+  }
+
+  return parts[1];
+}
+
+function parseExpiryToSeconds(expiryStr: string): number {
+  const match = expiryStr.match(/^(\d+)([smhd])$/);
+  if (!match) return 3600; // default 1 hour
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+
+  switch (unit) {
+    case 's':
+      return value;
+    case 'm':
+      return value * 60;
+    case 'h':
+      return value * 3600;
+    case 'd':
+      return value * 86400;
+    default:
+      return 3600;
+  }
+}

@@ -1,0 +1,7 @@
+Auth module files will be created here.
+Structure:
+- auth.controller.ts
+- auth.service.ts
+- auth.routes.ts
+- auth.schemas.ts
+- auth.types.ts

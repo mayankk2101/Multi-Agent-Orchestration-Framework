@@ -1,0 +1,7 @@
+CRM module files will be created here.
+Structure:
+- crm.controller.ts
+- crm.service.ts
+- crm.routes.ts
+- crm.schemas.ts
+- crm.types.ts
