@@ -25,7 +25,7 @@ export function requirePermission(permissions: string | string[]) {
     }
 
     // Check if user has all required permissions
-    const hasPermission = requiredPermissions.some((permission) => {
+    const hasPermission = requiredPermissions.every((permission) => {
       return (
         userPermissions.includes(permission) ||
         // Check for wildcard permissions (e.g., "users:*" covers "users:read")

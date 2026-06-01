@@ -35,7 +35,8 @@ model User {
   created_tasks         Task[]            @relation("created_by")
   assigned_tasks        Task[]            @relation("assigned_to")
   verifications         QualityVerification[]
-  ratings               Rating[]
+  ratings_received      Rating[]          @relation("ratings_received")
+  ratings_given         Rating[]          @relation("ratings_given")
   contracts             Contract[]        @relation("worker_contract")
   created_contracts     Contract[]        @relation("created_contract")
   uploaded_documents    WorkerDocument[]  @relation("uploaded_by")
@@ -201,9 +202,9 @@ model Rating {
   hotel_id        String
   hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
   worker_id       String
-  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Restrict, name: "ratings_received")
   rated_by_checker_id String
-  rated_by        User     @relation(fields: [rated_by_checker_id], references: [id], name: "user_ratings")
+  rated_by        User     @relation(fields: [rated_by_checker_id], references: [id], onDelete: Restrict, name: "ratings_given")
   score           Int      // 0-5 stars
   comment         String?
   created_at      DateTime @default(now())
@@ -216,7 +217,7 @@ model Rating {
 model WorkerOverallRating {
   id              String   @id @default(cuid())
   worker_id       String   @unique
-  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
   average_score   Float    // Aggregate of all ratings
   total_ratings   Int      @default(0)
   updated_at      DateTime @updatedAt
@@ -231,13 +232,13 @@ model WorkerOverallRating {
 model Contract {
   id                    String   @id @default(cuid())
   worker_id             String
-  worker                User     @relation("worker_contract", fields: [worker_id], references: [id], onDelete: Cascade)
+  worker                User     @relation("worker_contract", fields: [worker_id], references: [id], onDelete: Restrict)
   hotel_id              String
   hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
   contract_template_id  String
   template              ContractTemplate @relation(fields: [contract_template_id], references: [id])
   created_by_manager_id String
-  created_by            User     @relation("created_contract", fields: [created_by_manager_id], references: [id])
+  created_by            User     @relation("created_contract", fields: [created_by_manager_id], references: [id], onDelete: Restrict)
   contract_number       String   @unique
   start_date            DateTime
   end_date              DateTime?
@@ -294,7 +295,7 @@ model ContractLineItem {
 model WorkerDocument {
   id                    String   @id @default(cuid())
   worker_id             String
-  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
   hotel_id              String
   hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
   document_type         String   // "passport", "visa", "work_permit", etc
@@ -333,7 +334,7 @@ model RequiredDocument {
 model Payroll {
   id                String   @id @default(cuid())
   worker_id         String
-  worker            User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  worker            User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
   hotel_id          String
   hotel             Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
   pay_period_start  DateTime
@@ -346,6 +347,7 @@ model Payroll {
   created_at        DateTime @default(now())
   paid_at           DateTime?
   updated_at        DateTime @updatedAt
+  deleted_at        DateTime? // Soft delete for archival/compliance
 
   // Relations
   line_items        PayrollLineItem[]
@@ -355,6 +357,7 @@ model Payroll {
   @@index([hotel_id])
   @@index([status])
   @@index([paid_at])
+  @@index([deleted_at])
 }
 
 model PayrollLineItem {
@@ -372,7 +375,7 @@ model PayrollLineItem {
 model DataRetentionLog {
   id                    String   @id @default(cuid())
   worker_id             String
-  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
   data_category         String   // "CONTRACT", "PAYROLL", "DOCUMENTS", etc
   hire_date             DateTime
   retention_end_date    DateTime // When data MUST be deleted
