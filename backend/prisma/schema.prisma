@@ -1,8 +1,9 @@
 // =============================================================================
-// Hotel CRM — PRISMA_SCHEMA_V2
+// Hotel CRM — PRISMA_SCHEMA_V2  (PATCH_V1 applied)
 // Architecture: Marketplace (hotels post requests, workers apply)
 // Removed: Room, Task, TaskPhoto, DailyOperation
 // Added: HotelWorker, WorkApplication, Attendance
+// Patch: SP-1..SP-9 applied
 // =============================================================================
 
 generator client {
@@ -25,10 +26,13 @@ enum UserRole {
   ADMIN
 }
 
+// SP-1: INACTIVE removed; INVITED + REMOVED added to match frozen lifecycle.
+// Lifecycle: INVITED → ACTIVE → SUSPENDED ↔ ACTIVE; ACTIVE/SUSPENDED → REMOVED (terminal)
 enum HotelWorkerStatus {
+  INVITED
   ACTIVE
-  INACTIVE
   SUSPENDED
+  REMOVED
 }
 
 enum WorkRequestStatus {
@@ -57,7 +61,9 @@ enum AssignmentStatus {
   REASSIGNED
 }
 
+// SP-6: EXPECTED added as the initial pre-shift state; default changed to EXPECTED.
 enum AttendanceStatus {
+  EXPECTED  // record created pre-shift; worker not yet checked in
   PRESENT
   ABSENT
   LATE
@@ -76,6 +82,32 @@ enum NotificationChannel {
   EMAIL
   PUSH
   SMS
+}
+
+// SP-8: Notification.type promoted from String to NotificationType enum.
+// All values are domain events; free strings are not acceptable here.
+enum NotificationType {
+  // WorkRequest events
+  WORK_REQUEST_PUBLISHED
+  WORK_REQUEST_CANCELLED
+  WORK_REQUEST_EXPIRING_SOON
+  // WorkApplication events
+  APPLICATION_RECEIVED       // to manager: a worker applied
+  APPLICATION_ACCEPTED       // to worker: application approved
+  APPLICATION_REJECTED       // to worker: application declined
+  APPLICATION_WITHDRAWN      // to manager: worker withdrew
+  // WorkerAssignment events
+  ASSIGNMENT_CONFIRMED
+  ASSIGNMENT_CANCELLED
+  SHIFT_REMINDER             // pre-shift reminder to worker
+  CHECK_IN_REMINDER          // sent when shift start approaches with no check-in
+  // Attendance events
+  ATTENDANCE_VERIFIED        // to worker: manager verified attendance
+  WORKER_NO_SHOW             // to manager: worker did not check in
+  // Quality & Rating events
+  QUALITY_VERIFICATION_SUBMITTED
+  RATING_RECEIVED
+  REWORK_REQUIRED            // to worker: verification failed, rework needed
 }
 
 // =============================================================================
@@ -168,7 +200,8 @@ model Hotel {
 }
 
 // HotelWorker: roster — which workers are affiliated with a hotel and at what rate.
-// A worker must be on the hotel's roster before being eligible for its WorkRequests.
+// A worker must be ACTIVE on the hotel's roster to be eligible for its WorkRequests.
+// SP-2: invited_at records invite issuance; joined_at nullable until INVITED→ACTIVE.
 model HotelWorker {
   id          String            @id @default(cuid())
   hotel_id    String
@@ -176,12 +209,13 @@ model HotelWorker {
   worker_id   String
   worker      User              @relation(fields: [worker_id], references: [id], onDelete: Cascade)
   position    String            // "cleaner" | "checker" | "housekeeper" | "supervisor"
-  status      HotelWorkerStatus @default(ACTIVE)
+  status      HotelWorkerStatus @default(INVITED) // SP-1/SP-2: starts INVITED, not ACTIVE
   hourly_rate Decimal?          @db.Decimal(10, 2)
   currency    String            @default("EUR")
   notes       String?
-  joined_at   DateTime          @default(now())
-  left_at     DateTime?
+  invited_at  DateTime          @default(now()) // SP-2: set at row creation
+  joined_at   DateTime?                         // SP-2: set on INVITED → ACTIVE transition only
+  left_at     DateTime?                         // set on → REMOVED transition
   created_at  DateTime          @default(now())
   updated_at  DateTime          @updatedAt
 
@@ -197,6 +231,7 @@ model HotelWorker {
 // MARKETPLACE MODULE
 // =============================================================================
 
+// SP-9: version column added for optimistic locking against slot-fill race conditions.
 model WorkRequest {
   id                  String            @id @default(cuid())
   hotel_id            String
@@ -206,6 +241,7 @@ model WorkRequest {
   position            String            // required role for this shift
   workers_needed      Int               @default(1)
   workers_confirmed   Int               @default(0)
+  version             Int               @default(0) // SP-9: incremented on each status-changing write
   shift_date          DateTime          @db.Date
   shift_start_time    String            // stored as HH:MM; derive full DateTime with hotel timezone
   shift_end_time      String
@@ -226,8 +262,8 @@ model WorkRequest {
   applications WorkApplication[]
   assignments  WorkerAssignment[]
 
-  // workers_confirmed must never exceed workers_needed — enforced at app layer +
-  // CHECK constraint added in migration
+  // workers_confirmed must never exceed workers_needed — CHECK constraint in migration.
+  // Slot-fill race: app layer must do UPDATE ... WHERE version = $known AND workers_confirmed < workers_needed.
   @@index([hotel_id])
   @@index([created_by_id])
   @@index([status])
@@ -237,7 +273,8 @@ model WorkRequest {
 }
 
 // WorkApplication: a worker expresses interest in a WorkRequest.
-// Manager reviews and accepts or rejects; acceptance triggers WorkerAssignment creation.
+// Manager accepts → WorkerAssignment created. Flow is mandatory (no bypass).
+// SP-4: assignment back-relation declared here.
 model WorkApplication {
   id              String            @id @default(cuid())
   work_request_id String
@@ -256,6 +293,9 @@ model WorkApplication {
   applied_at      DateTime          @default(now())
   updated_at      DateTime          @updatedAt
 
+  // SP-4: back-relation to the assignment created from this application
+  assignment      WorkerAssignment?
+
   // One application per worker per request
   @@unique([work_request_id, worker_id])
   @@index([work_request_id])
@@ -264,6 +304,12 @@ model WorkApplication {
   @@index([applied_at])
 }
 
+// SP-3: application_id is non-nullable and FK-linked to WorkApplication.
+//       Every assignment must trace back to an accepted application — no bypass.
+// SP-5: @@unique([work_request_id, worker_id]) removed.
+//       A worker can have multiple assignment rows for the same request
+//       (CANCELLED + new CONFIRMED via reassignment chain). Double-booking for
+//       active statuses is prevented by the partial unique index in the migration.
 model WorkerAssignment {
   id                     String           @id @default(cuid())
   work_request_id        String
@@ -274,8 +320,9 @@ model WorkerAssignment {
   hotel                  Hotel            @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
   assigned_by_id         String
   assigned_by            User             @relation("assignment_manager", fields: [assigned_by_id], references: [id], onDelete: Restrict)
-  // Nullable so assignments can be created directly by managers without an application
-  application_id         String?          @unique
+  // SP-3: required FK to WorkApplication — marketplace flow is mandatory
+  application_id         String           @unique
+  application            WorkApplication  @relation(fields: [application_id], references: [id], onDelete: Restrict)
   status                 AssignmentStatus @default(CONFIRMED)
   confirmed_at           DateTime         @default(now())
   started_at             DateTime?
@@ -293,10 +340,8 @@ model WorkerAssignment {
   quality_verification QualityVerification?
   rating               Rating?
 
-  // One confirmed/active slot per worker per request prevents double-booking.
-  // The partial unique index enforcing this for CONFIRMED/IN_PROGRESS rows is
-  // created via raw SQL in the migration (Prisma cannot express partial indexes).
-  @@unique([work_request_id, worker_id])
+  // SP-5: full unique constraint removed. Active-slot double-booking is enforced
+  // by the partial unique index in the migration (status IN CONFIRMED, IN_PROGRESS).
   @@index([work_request_id])
   @@index([worker_id])
   @@index([hotel_id])
@@ -308,6 +353,8 @@ model WorkerAssignment {
 // ATTENDANCE MODULE
 // =============================================================================
 
+// SP-6: status defaults to EXPECTED (pre-shift state before worker arrives).
+// SP-7: is_verified flag added for efficient manager-dashboard queries.
 model Attendance {
   id             String           @id @default(cuid())
   assignment_id  String           @unique // 1-to-1 with WorkerAssignment
@@ -316,15 +363,16 @@ model Attendance {
   worker         User             @relation("attendee", fields: [worker_id], references: [id], onDelete: Cascade)
   hotel_id       String
   hotel          Hotel            @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  status         AttendanceStatus @default(PRESENT)
+  status         AttendanceStatus @default(EXPECTED) // SP-6
   check_in_at    DateTime?
   check_out_at   DateTime?
-  // Denormalised from WorkRequest so payroll/reporting queries don't need an extra join
+  // Denormalised from WorkRequest so payroll/reporting queries need no extra join
   expected_start DateTime?
   expected_end   DateTime?
   minutes_late   Int?
   minutes_worked Int?
   notes          String?
+  is_verified    Boolean          @default(false)    // SP-7: set true when manager verifies
   verified_by_id String?
   verified_by    User?            @relation("attendance_verifier", fields: [verified_by_id], references: [id], onDelete: SetNull)
   verified_at    DateTime?
@@ -335,7 +383,8 @@ model Attendance {
   @@index([hotel_id])
   @@index([status])
   @@index([check_in_at])
-  @@index([worker_id, check_in_at]) // "worker's shifts in date range"
+  @@index([worker_id, check_in_at])    // "worker's shifts in date range"
+  @@index([hotel_id, is_verified])     // SP-7: "pending verifications" dashboard
 }
 
 // =============================================================================
@@ -350,7 +399,7 @@ model QualityVerification {
   hotel            Hotel              @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
   verified_by_id   String
   verified_by      User               @relation("verifier", fields: [verified_by_id], references: [id], onDelete: Restrict)
-  score            Int                // 0–100
+  score            Int                // 0–100; CHECK constraint in migration
   status           VerificationStatus @default(PASSED)
   notes            String?
   photo_urls       String[]           // evidence uploaded to object storage
@@ -360,7 +409,6 @@ model QualityVerification {
   created_at       DateTime           @default(now())
   updated_at       DateTime           @updatedAt
 
-  // score must be 0–100 — CHECK constraint in migration
   @@index([hotel_id])
   @@index([verified_by_id])
   @@index([status])
@@ -377,14 +425,13 @@ model Rating {
   worker        User             @relation("rated_worker", fields: [worker_id], references: [id], onDelete: Cascade)
   rated_by_id   String
   rated_by      User             @relation("rater", fields: [rated_by_id], references: [id], onDelete: Restrict)
-  score         Int              // 1–5 stars
+  score         Int              // 1–5 stars; CHECK constraint in migration
   comment       String?
   // Structured sub-scores; schema: { punctuality: Int, quality: Int, attitude: Int }
   criteria_scores Json?
   created_at    DateTime         @default(now())
   updated_at    DateTime         @updatedAt
 
-  // score must be 1–5 — CHECK constraint in migration
   @@index([hotel_id])
   @@index([worker_id])
   @@index([rated_by_id])
@@ -392,7 +439,7 @@ model Rating {
   @@index([created_at])
 }
 
-// Materialised aggregate — updated by a DB trigger or app-layer upsert after each Rating write.
+// Materialised aggregate — updated by DB trigger after each Rating write.
 // Avoids expensive AVG() scans on marketplace listing pages.
 model WorkerOverallRating {
   id               String    @id @default(cuid())
@@ -414,13 +461,14 @@ model WorkerOverallRating {
 // NOTIFICATIONS MODULE
 // =============================================================================
 
+// SP-8: type promoted from String to NotificationType enum.
 model Notification {
   id         String              @id @default(cuid())
   user_id    String
   user       User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
   hotel_id   String?
   hotel      Hotel?              @relation(fields: [hotel_id], references: [id], onDelete: SetNull)
-  type       String              // e.g. "APPLICATION_ACCEPTED" | "SHIFT_REMINDER" | "RATING_RECEIVED"
+  type       NotificationType    // SP-8: was String
   channel    NotificationChannel @default(IN_APP)
   title      String
   message    String
