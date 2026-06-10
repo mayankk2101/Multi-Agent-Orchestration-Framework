@@ -1,86 +1,165 @@
 import { Request, Response, NextFunction } from 'express';
 import { crmService } from './service.js';
+import {
+  CreateHotelSchema, UpdateHotelSchema,
+  CreateRoomSchema, UpdateRoomSchema,
+  ListHotelsQuerySchema, ListRoomsQuerySchema,
+} from './types.js';
+import { validateBody, validateQuery } from '../../middleware/validation.js';
+import { UnauthorizedError } from '../../lib/errors.js';
 
-/**
- * CRM Controller
- *
- * Handles HTTP requests for:
- * - Hotels: GET /api/v1/hotels, POST, PUT, DELETE
- * - Rooms: GET /api/v1/hotels/:hotel-id/rooms
- * - Tasks: GET /api/v1/tasks, POST, PUT
- * - Photos: POST /api/v1/tasks/:id/photos
- *
- * IMPORTANT: Implementation deferred to later phase
- */
 export class CrmController {
-  async listHotels(req: Request, res: Response, next: NextFunction) {
-    try {
-      const result = await crmService.listHotels(req.query);
-      res.status(200).json({
-        status: 'success',
-        data: result,
-        meta: {
-          timestamp: new Date().toISOString(),
-          request_id: req.requestId,
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  async createHotel(req: Request, res: Response, next: NextFunction) {
-    try {
-      const result = await crmService.createHotel(req.body);
-      res.status(201).json({
-        status: 'success',
-        data: result,
-        meta: {
-          timestamp: new Date().toISOString(),
-          request_id: req.requestId,
-        },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  listHotels = [
+    validateQuery(ListHotelsQuerySchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.auth) throw new UnauthorizedError();
+        const result = await crmService.listHotels(req.query as never, req.auth.role);
+        res.status(200).json({
+          status: 'success',
+          data: result.hotels,
+          pagination: result.pagination,
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
 
   async getHotel(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await crmService.getHotel(req.params.hotel_id);
+      if (!req.auth) throw new UnauthorizedError();
+      const hotel = await crmService.getHotel(req.params['hotel_id']!, req.auth.userId, req.auth.role, req.ip);
       res.status(200).json({
         status: 'success',
-        data: result,
-        meta: {
-          timestamp: new Date().toISOString(),
-          request_id: req.requestId,
-        },
+        data: hotel,
+        meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
       });
     } catch (error) {
       next(error);
     }
   }
 
-  async createTask(req: Request, res: Response, next: NextFunction) {
+  createHotel = [
+    validateBody(CreateHotelSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.auth) throw new UnauthorizedError();
+        const hotel = await crmService.createHotel(req.body, req.auth.userId, req.auth.role, req.ip);
+        res.status(201).json({
+          status: 'success',
+          data: hotel,
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+
+  updateHotel = [
+    validateBody(UpdateHotelSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.auth) throw new UnauthorizedError();
+        const hotel = await crmService.updateHotel(req.params['hotel_id']!, req.body, req.auth.userId, req.auth.role, req.ip);
+        res.status(200).json({
+          status: 'success',
+          data: hotel,
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+
+  async deleteHotel(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await crmService.createTask(req.params.hotel_id, req.body);
-      res.status(201).json({
+      if (!req.auth) throw new UnauthorizedError();
+      await crmService.deleteHotel(req.params['hotel_id']!, req.auth.userId, req.auth.role, req.ip);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // Rooms
+  listRooms = [
+    validateQuery(ListRoomsQuerySchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.auth) throw new UnauthorizedError();
+        const result = await crmService.listRooms(req.params['hotel_id']!, req.query as never);
+        res.status(200).json({
+          status: 'success',
+          data: result.rooms,
+          pagination: result.pagination,
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+
+  async getRoom(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.auth) throw new UnauthorizedError();
+      const room = await crmService.getRoom(req.params['hotel_id']!, req.params['room_id']!);
+      res.status(200).json({
         status: 'success',
-        data: result,
-        meta: {
-          timestamp: new Date().toISOString(),
-          request_id: req.requestId,
-        },
+        data: room,
+        meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
       });
     } catch (error) {
       next(error);
     }
   }
 
+  createRoom = [
+    validateBody(CreateRoomSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.auth) throw new UnauthorizedError();
+        const room = await crmService.createRoom(req.params['hotel_id']!, req.body, req.auth.userId, req.auth.role, req.ip);
+        res.status(201).json({
+          status: 'success',
+          data: room,
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+
+  updateRoom = [
+    validateBody(UpdateRoomSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        if (!req.auth) throw new UnauthorizedError();
+        const room = await crmService.updateRoom(req.params['hotel_id']!, req.params['room_id']!, req.body, req.auth.userId, req.auth.role, req.ip);
+        res.status(200).json({
+          status: 'success',
+          data: room,
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
+
+  // Placeholder for task photo upload (Sprint 2)
   async uploadPhoto(req: Request, res: Response, next: NextFunction) {
     try {
-      // TODO: Handle file upload
-      throw new Error('Not implemented');
+      res.status(501).json({
+        status: 'error',
+        error: { code: 'NOT_IMPLEMENTED', message: 'Photo upload scheduled for Sprint 2' },
+        meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+      });
     } catch (error) {
       next(error);
     }

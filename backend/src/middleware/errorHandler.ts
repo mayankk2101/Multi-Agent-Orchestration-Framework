@@ -9,7 +9,7 @@ export function errorHandler(
   req: Request,
   res: Response,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  next: NextFunction
+  _next: NextFunction
 ): void {
   const env = getEnv();
   const request_id = req.requestId || 'unknown';
