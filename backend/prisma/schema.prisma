@@ -1,5 +1,10 @@
-// Hotel CRM - Modular Monolith MVP
-// Database Schema
+// =============================================================================
+// Hotel CRM — PRISMA_SCHEMA_V2  (PATCH_V1 applied)
+// Architecture: Marketplace (hotels post requests, workers apply)
+// Removed: Room, Task, TaskPhoto, DailyOperation
+// Added: HotelWorker, WorkApplication, Attendance
+// Patch: SP-1..SP-9 applied
+// =============================================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -10,48 +15,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// AUTH MODULE
-// ============================================
-
-model User {
-  id                    String   @id @default(cuid())
-  email                 String   @unique
-  password_hash         String
-  first_name            String
-  last_name             String
-  phone                 String?
-  profile_photo_url     String?
-  role                  UserRole @default(WORKER)
-  hotel_ids             String[] // Array of hotel IDs manager has access to
-  permissions           String[] // Array of permission codes
-  is_active             Boolean  @default(true)
-  deleted_at            DateTime?
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
-
-  // Relations
-  sessions              Session[]
-  created_tasks         Task[]            @relation("created_by")
-  assigned_tasks        Task[]            @relation("assigned_to")
-  verifications         QualityVerification[]
-  ratings_received      Rating[]          @relation("ratings_received")
-  ratings_given         Rating[]          @relation("ratings_given")
-  contracts             Contract[]        @relation("worker_contract")
-  created_contracts     Contract[]        @relation("created_contract")
-  uploaded_documents    WorkerDocument[]  @relation("uploaded_by")
-  payroll_records       Payroll[]
-  work_assignments      WorkerAssignment[]
-  created_work_requests WorkRequest[]
-  assigned_work_requests WorkRequest[]    @relation("assigned_by")
-  created_operations    DailyOperation[]  @relation("created_by")
-  notifications         Notification[]
-  audit_logs            AuditLog[]
-
-  @@index([role])
-  @@index([is_active])
-  @@index([deleted_at])
-}
+// =============================================================================
+// ENUMS
+// =============================================================================
 
 enum UserRole {
   WORKER
@@ -60,473 +26,490 @@ enum UserRole {
   ADMIN
 }
 
+// SP-1: INACTIVE removed; INVITED + REMOVED added to match frozen lifecycle.
+// Lifecycle: INVITED → ACTIVE → SUSPENDED ↔ ACTIVE; ACTIVE/SUSPENDED → REMOVED (terminal)
+enum HotelWorkerStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum WorkRequestStatus {
+  DRAFT
+  OPEN
+  PARTIALLY_FILLED
+  FILLED
+  CANCELLED
+  EXPIRED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+}
+
+enum AssignmentStatus {
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+  REASSIGNED
+}
+
+// SP-6: EXPECTED added as the initial pre-shift state; default changed to EXPECTED.
+enum AttendanceStatus {
+  EXPECTED  // record created pre-shift; worker not yet checked in
+  PRESENT
+  ABSENT
+  LATE
+  PARTIAL
+  EXCUSED
+}
+
+enum VerificationStatus {
+  PASSED
+  FAILED
+  NEEDS_REWORK
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+  SMS
+}
+
+// SP-8: Notification.type promoted from String to NotificationType enum.
+// All values are domain events; free strings are not acceptable here.
+enum NotificationType {
+  // WorkRequest events
+  WORK_REQUEST_PUBLISHED
+  WORK_REQUEST_CANCELLED
+  WORK_REQUEST_EXPIRING_SOON
+  // WorkApplication events
+  APPLICATION_RECEIVED       // to manager: a worker applied
+  APPLICATION_ACCEPTED       // to worker: application approved
+  APPLICATION_REJECTED       // to worker: application declined
+  APPLICATION_WITHDRAWN      // to manager: worker withdrew
+  // WorkerAssignment events
+  ASSIGNMENT_CONFIRMED
+  ASSIGNMENT_CANCELLED
+  SHIFT_REMINDER             // pre-shift reminder to worker
+  CHECK_IN_REMINDER          // sent when shift start approaches with no check-in
+  // Attendance events
+  ATTENDANCE_VERIFIED        // to worker: manager verified attendance
+  WORKER_NO_SHOW             // to manager: worker did not check in
+  // Quality & Rating events
+  QUALITY_VERIFICATION_SUBMITTED
+  RATING_RECEIVED
+  REWORK_REQUIRED            // to worker: verification failed, rework needed
+}
+
+// =============================================================================
+// AUTH MODULE
+// =============================================================================
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  password_hash      String
+  first_name         String
+  last_name          String
+  phone              String?   @unique
+  profile_photo_url  String?
+  role               UserRole  @default(WORKER)
+  permissions        String[]  // granular permission codes e.g. ["work_request:read"]
+  is_active          Boolean   @default(true)
+  email_verified_at  DateTime?
+  phone_verified_at  DateTime?
+  last_login_at      DateTime?
+  deleted_at         DateTime? // GDPR soft delete — keep row, null PII via separate job
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @updatedAt
+
+  // Relations
+  sessions                  Session[]
+  hotel_workers             HotelWorker[]
+  work_applications         WorkApplication[]       @relation("applicant")
+  reviewed_applications     WorkApplication[]       @relation("application_reviewer")
+  assignments               WorkerAssignment[]      @relation("assigned_worker")
+  assignments_managed       WorkerAssignment[]      @relation("assignment_manager")
+  attendance_records        Attendance[]            @relation("attendee")
+  attendance_verified       Attendance[]            @relation("attendance_verifier")
+  verifications_performed   QualityVerification[]   @relation("verifier")
+  ratings_received          Rating[]                @relation("rated_worker")
+  ratings_given             Rating[]                @relation("rater")
+  overall_rating            WorkerOverallRating?
+  notifications             Notification[]
+  created_work_requests     WorkRequest[]           @relation("request_creator")
+  audit_logs                AuditLog[]
+
+  @@index([role])
+  @@index([is_active])
+  @@index([deleted_at])
+}
+
 model Session {
-  id          String   @id @default(cuid())
-  user_id     String
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  refresh_token String
-  expires_at  DateTime
-  created_at  DateTime @default(now())
+  id            String   @id @default(cuid())
+  user_id       String
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  refresh_token String   @unique
+  device_info   String?
+  ip_address    String?
+  expires_at    DateTime
+  created_at    DateTime @default(now())
 
   @@index([user_id])
   @@index([expires_at])
 }
 
-// ============================================
-// CRM MODULE - Hotels, Rooms, Tasks
-// ============================================
+// =============================================================================
+// HOTEL MODULE
+// =============================================================================
 
 model Hotel {
-  id          String   @id @default(cuid())
-  name        String
-  city        String
-  country     String   @default("Germany")
-  address     String
-  timezone    String   @default("Europe/Berlin")
-  is_active   Boolean  @default(true)
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  city          String
+  country       String   @default("Germany")
+  address       String
+  timezone      String   @default("Europe/Berlin")
+  contact_email String?
+  contact_phone String?
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   // Relations
-  rooms               Room[]
-  tasks               Task[]
-  daily_operations    DailyOperation[]
-  work_requests       WorkRequest[]
-  contracts           Contract[]
-  documents           WorkerDocument[]
-  payroll_records     Payroll[]
-  verifications       QualityVerification[]
-  ratings             Rating[]
+  hotel_workers    HotelWorker[]
+  work_requests    WorkRequest[]
+  assignments      WorkerAssignment[]
+  attendance       Attendance[]
+  verifications    QualityVerification[]
+  ratings          Rating[]
+  notifications    Notification[]
 
   @@index([country])
   @@index([is_active])
+  @@index([city, country])
 }
 
-model Room {
-  id          String   @id @default(cuid())
+// HotelWorker: roster — which workers are affiliated with a hotel and at what rate.
+// A worker must be ACTIVE on the hotel's roster to be eligible for its WorkRequests.
+// SP-2: invited_at records invite issuance; joined_at nullable until INVITED→ACTIVE.
+model HotelWorker {
+  id          String            @id @default(cuid())
   hotel_id    String
-  hotel       Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  number      String
-  type        String   // "single", "double", "suite"
-  status      String   @default("clean") // "clean", "dirty", "occupied", "maintenance"
+  hotel       Hotel             @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  worker_id   String
+  worker      User              @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  position    String            // "cleaner" | "checker" | "housekeeper" | "supervisor"
+  status      HotelWorkerStatus @default(INVITED) // SP-1/SP-2: starts INVITED, not ACTIVE
+  hourly_rate Decimal?          @db.Decimal(10, 2)
+  currency    String            @default("EUR")
   notes       String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  invited_at  DateTime          @default(now()) // SP-2: set at row creation
+  joined_at   DateTime?                         // SP-2: set on INVITED → ACTIVE transition only
+  left_at     DateTime?                         // set on → REMOVED transition
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @updatedAt
+
+  // A worker appears on a hotel's roster exactly once
+  @@unique([hotel_id, worker_id])
+  @@index([hotel_id])
+  @@index([worker_id])
+  @@index([status])
+  @@index([position])
+}
+
+// =============================================================================
+// MARKETPLACE MODULE
+// =============================================================================
+
+// SP-9: version column added for optimistic locking against slot-fill race conditions.
+model WorkRequest {
+  id                  String            @id @default(cuid())
+  hotel_id            String
+  hotel               Hotel             @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  created_by_id       String
+  created_by          User              @relation("request_creator", fields: [created_by_id], references: [id], onDelete: Restrict)
+  position            String            // required role for this shift
+  workers_needed      Int               @default(1)
+  workers_confirmed   Int               @default(0)
+  version             Int               @default(0) // SP-9: incremented on each status-changing write
+  shift_date          DateTime          @db.Date
+  shift_start_time    String            // stored as HH:MM; derive full DateTime with hotel timezone
+  shift_end_time      String
+  hourly_rate         Decimal?          @db.Decimal(10, 2)
+  currency            String            @default("EUR")
+  description         String?
+  requirements        String?           // free-text skill/cert requirements
+  status              WorkRequestStatus @default(DRAFT)
+  published_at        DateTime?
+  expires_at          DateTime?
+  filled_at           DateTime?
+  cancelled_at        DateTime?
+  cancellation_reason String?
+  created_at          DateTime          @default(now())
+  updated_at          DateTime          @updatedAt
 
   // Relations
-  tasks       Task[]
-  daily_operations DailyOperation[]
+  applications WorkApplication[]
+  assignments  WorkerAssignment[]
 
-  @@unique([hotel_id, number])
+  // workers_confirmed must never exceed workers_needed — CHECK constraint in migration.
+  // Slot-fill race: app layer must do UPDATE ... WHERE version = $known AND workers_confirmed < workers_needed.
+  @@index([hotel_id])
+  @@index([created_by_id])
+  @@index([status])
+  @@index([shift_date])
+  @@index([position])
+  @@index([hotel_id, status, shift_date]) // hot path: "open shifts at hotel on date"
+}
+
+// WorkApplication: a worker expresses interest in a WorkRequest.
+// Manager accepts → WorkerAssignment created. Flow is mandatory (no bypass).
+// SP-4: assignment back-relation declared here.
+model WorkApplication {
+  id              String            @id @default(cuid())
+  work_request_id String
+  work_request    WorkRequest       @relation(fields: [work_request_id], references: [id], onDelete: Cascade)
+  worker_id       String
+  worker          User              @relation("applicant", fields: [worker_id], references: [id], onDelete: Cascade)
+  reviewed_by_id  String?
+  reviewed_by     User?             @relation("application_reviewer", fields: [reviewed_by_id], references: [id], onDelete: SetNull)
+  status          ApplicationStatus @default(PENDING)
+  cover_note      String?
+  // Snapshot of worker's rating at application time — avoids joining WorkerOverallRating
+  // on every marketplace listing query
+  worker_rating_snapshot Float?
+  reviewed_at     DateTime?
+  rejection_reason String?
+  applied_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+
+  // SP-4: back-relation to the assignment created from this application
+  assignment      WorkerAssignment?
+
+  // One application per worker per request
+  @@unique([work_request_id, worker_id])
+  @@index([work_request_id])
+  @@index([worker_id])
+  @@index([status])
+  @@index([applied_at])
+}
+
+// SP-3: application_id is non-nullable and FK-linked to WorkApplication.
+//       Every assignment must trace back to an accepted application — no bypass.
+// SP-5: @@unique([work_request_id, worker_id]) removed.
+//       A worker can have multiple assignment rows for the same request
+//       (CANCELLED + new CONFIRMED via reassignment chain). Double-booking for
+//       active statuses is prevented by the partial unique index in the migration.
+model WorkerAssignment {
+  id                     String           @id @default(cuid())
+  work_request_id        String
+  work_request           WorkRequest      @relation(fields: [work_request_id], references: [id], onDelete: Cascade)
+  worker_id              String
+  worker                 User             @relation("assigned_worker", fields: [worker_id], references: [id], onDelete: Cascade)
+  hotel_id               String
+  hotel                  Hotel            @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  assigned_by_id         String
+  assigned_by            User             @relation("assignment_manager", fields: [assigned_by_id], references: [id], onDelete: Restrict)
+  // SP-3: required FK to WorkApplication — marketplace flow is mandatory
+  application_id         String           @unique
+  application            WorkApplication  @relation(fields: [application_id], references: [id], onDelete: Restrict)
+  status                 AssignmentStatus @default(CONFIRMED)
+  confirmed_at           DateTime         @default(now())
+  started_at             DateTime?
+  completed_at           DateTime?
+  cancelled_at           DateTime?
+  cancellation_reason    String?
+  // Self-referential chain for reassignments
+  previous_assignment_id String?
+  previous_assignment    WorkerAssignment?  @relation("reassignment_chain", fields: [previous_assignment_id], references: [id], onDelete: SetNull)
+  reassignments          WorkerAssignment[] @relation("reassignment_chain")
+  updated_at             DateTime           @updatedAt
+
+  // Relations — each assignment yields at most one attendance record, one QV, one rating
+  attendance           Attendance?
+  quality_verification QualityVerification?
+  rating               Rating?
+
+  // SP-5: full unique constraint removed. Active-slot double-booking is enforced
+  // by the partial unique index in the migration (status IN CONFIRMED, IN_PROGRESS).
+  @@index([work_request_id])
+  @@index([worker_id])
   @@index([hotel_id])
   @@index([status])
+  @@index([confirmed_at])
 }
 
-model Task {
-  id                    String   @id @default(cuid())
-  hotel_id              String
-  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  room_id               String
-  room                  Room     @relation(fields: [room_id], references: [id], onDelete: Cascade)
-  assigned_to_worker_id String
-  assigned_to_worker    User     @relation("assigned_to", fields: [assigned_to_worker_id], references: [id])
-  created_by_manager_id String
-  created_by            User     @relation("created_by", fields: [created_by_manager_id], references: [id])
-  description           String
-  priority              String   @default("medium") // "low", "medium", "high"
-  status                TaskStatus @default(ASSIGNED)
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
-  started_at            DateTime?
-  completed_at          DateTime?
+// =============================================================================
+// ATTENDANCE MODULE
+// =============================================================================
 
-  // Relations
-  photos                TaskPhoto[]
-  quality_verification  QualityVerification?
-  rating                Rating?
+// SP-6: status defaults to EXPECTED (pre-shift state before worker arrives).
+// SP-7: is_verified flag added for efficient manager-dashboard queries.
+model Attendance {
+  id             String           @id @default(cuid())
+  assignment_id  String           @unique // 1-to-1 with WorkerAssignment
+  assignment     WorkerAssignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  worker_id      String
+  worker         User             @relation("attendee", fields: [worker_id], references: [id], onDelete: Cascade)
+  hotel_id       String
+  hotel          Hotel            @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  status         AttendanceStatus @default(EXPECTED) // SP-6
+  check_in_at    DateTime?
+  check_out_at   DateTime?
+  // Denormalised from WorkRequest so payroll/reporting queries need no extra join
+  expected_start DateTime?
+  expected_end   DateTime?
+  minutes_late   Int?
+  minutes_worked Int?
+  notes          String?
+  is_verified    Boolean          @default(false)    // SP-7: set true when manager verifies
+  verified_by_id String?
+  verified_by    User?            @relation("attendance_verifier", fields: [verified_by_id], references: [id], onDelete: SetNull)
+  verified_at    DateTime?
+  created_at     DateTime         @default(now())
+  updated_at     DateTime         @updatedAt
 
+  @@index([worker_id])
   @@index([hotel_id])
-  @@index([room_id])
-  @@index([assigned_to_worker_id])
   @@index([status])
-  @@index([created_at])
+  @@index([check_in_at])
+  @@index([worker_id, check_in_at])    // "worker's shifts in date range"
+  @@index([hotel_id, is_verified])     // SP-7: "pending verifications" dashboard
 }
 
-enum TaskStatus {
-  ASSIGNED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
-model TaskPhoto {
-  id            String   @id @default(cuid())
-  task_id       String
-  task          Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
-  url           String   // DO Spaces URL
-  description   String?
-  file_size     Int
-  mime_type     String
-  created_at    DateTime @default(now())
-
-  @@index([task_id])
-}
-
-// ============================================
+// =============================================================================
 // QUALITY MODULE
-// ============================================
+// =============================================================================
 
 model QualityVerification {
-  id              String   @id @default(cuid())
-  task_id         String   @unique
-  task            Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
-  hotel_id        String
-  hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  verified_by_checker_id String
-  verified_by     User     @relation(fields: [verified_by_checker_id], references: [id])
-  score           Int      // 0-100
-  notes           String?
-  status          String   @default("verified") // "verified", "needs_rework"
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  id               String             @id @default(cuid())
+  assignment_id    String             @unique // 1-to-1 with WorkerAssignment
+  assignment       WorkerAssignment   @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  hotel_id         String
+  hotel            Hotel              @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  verified_by_id   String
+  verified_by      User               @relation("verifier", fields: [verified_by_id], references: [id], onDelete: Restrict)
+  score            Int                // 0–100; CHECK constraint in migration
+  status           VerificationStatus @default(PASSED)
+  notes            String?
+  photo_urls       String[]           // evidence uploaded to object storage
+  rework_required  Boolean            @default(false)
+  rework_notes     String?
+  rework_completed_at DateTime?
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @updatedAt
 
-  @@index([task_id])
   @@index([hotel_id])
-  @@index([verified_by_checker_id])
+  @@index([verified_by_id])
+  @@index([status])
+  @@index([score])
 }
 
 model Rating {
-  id              String   @id @default(cuid())
-  task_id         String   @unique
-  task            Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
-  hotel_id        String
-  hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  worker_id       String
-  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Restrict, name: "ratings_received")
-  rated_by_checker_id String
-  rated_by        User     @relation(fields: [rated_by_checker_id], references: [id], onDelete: Restrict, name: "ratings_given")
-  score           Int      // 0-5 stars
-  comment         String?
-  created_at      DateTime @default(now())
+  id            String           @id @default(cuid())
+  assignment_id String           @unique // 1-to-1 with WorkerAssignment
+  assignment    WorkerAssignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  hotel_id      String
+  hotel         Hotel            @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
+  worker_id     String
+  worker        User             @relation("rated_worker", fields: [worker_id], references: [id], onDelete: Cascade)
+  rated_by_id   String
+  rated_by      User             @relation("rater", fields: [rated_by_id], references: [id], onDelete: Restrict)
+  score         Int              // 1–5 stars; CHECK constraint in migration
+  comment       String?
+  // Structured sub-scores; schema: { punctuality: Int, quality: Int, attitude: Int }
+  criteria_scores Json?
+  created_at    DateTime         @default(now())
+  updated_at    DateTime         @updatedAt
 
   @@index([hotel_id])
   @@index([worker_id])
+  @@index([rated_by_id])
+  @@index([score])
   @@index([created_at])
 }
 
+// Materialised aggregate — updated by DB trigger after each Rating write.
+// Avoids expensive AVG() scans on marketplace listing pages.
 model WorkerOverallRating {
-  id              String   @id @default(cuid())
-  worker_id       String   @unique
-  worker          User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
-  average_score   Float    // Aggregate of all ratings
-  total_ratings   Int      @default(0)
-  updated_at      DateTime @updatedAt
+  id               String    @id @default(cuid())
+  worker_id        String    @unique
+  worker           User      @relation(fields: [worker_id], references: [id], onDelete: Cascade)
+  average_score    Float     // rolling average of Rating.score
+  total_ratings    Int       @default(0)
+  total_assignments Int      @default(0)
+  completion_rate  Float     @default(0.0) // completed / total assignments
+  on_time_rate     Float     @default(0.0) // present-on-time / total assignments
+  last_worked_at   DateTime?
+  updated_at       DateTime  @updatedAt
 
-  @@index([worker_id])
+  @@index([average_score])
+  @@index([total_ratings])
 }
 
-// ============================================
-// HR MODULE
-// ============================================
-
-model Contract {
-  id                    String   @id @default(cuid())
-  worker_id             String
-  worker                User     @relation("worker_contract", fields: [worker_id], references: [id], onDelete: Restrict)
-  hotel_id              String
-  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  contract_template_id  String
-  template              ContractTemplate @relation(fields: [contract_template_id], references: [id])
-  created_by_manager_id String
-  created_by            User     @relation("created_contract", fields: [created_by_manager_id], references: [id], onDelete: Restrict)
-  contract_number       String   @unique
-  start_date            DateTime
-  end_date              DateTime?
-  employment_type       String   @default("permanent") // "permanent", "seasonal", "temporary", "freelance"
-  position              String
-  salary_amount         Decimal  @db.Decimal(10, 2)
-  salary_currency       String   @default("EUR")
-  status                String   @default("active") // "draft", "signed", "active", "expired", "terminated"
-  document_url          String?  // Encrypted PDF URL in DO Spaces
-  document_hash         String?  // SHA-256 for integrity
-  signed_at             DateTime?
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
-  deleted_at            DateTime? // Soft delete for GDPR
-
-  // Relations
-  line_items            ContractLineItem[]
-
-  @@index([worker_id])
-  @@index([hotel_id])
-  @@index([status])
-  @@index([deleted_at])
-}
-
-model ContractTemplate {
-  id              String   @id @default(cuid())
-  hotel_id        String
-  hotel           Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  name            String
-  description     String?
-  template_content String  // HTML template
-  required_fields Json    // { "salary": "required", "end_date": "optional" }
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
-
-  // Relations
-  contracts       Contract[]
-
-  @@index([hotel_id])
-}
-
-model ContractLineItem {
-  id          String   @id @default(cuid())
-  contract_id String
-  contract    Contract @relation(fields: [contract_id], references: [id], onDelete: Cascade)
-  description String
-  amount      Decimal  @db.Decimal(10, 2)
-  item_type   String   // "salary", "bonus", "deduction"
-  created_at  DateTime @default(now())
-
-  @@index([contract_id])
-}
-
-model WorkerDocument {
-  id                    String   @id @default(cuid())
-  worker_id             String
-  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
-  hotel_id              String
-  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  document_type         String   // "passport", "visa", "work_permit", etc
-  document_name         String
-  document_url          String   // Encrypted in DO Spaces
-  document_hash         String?  // SHA-256
-  file_size             Int
-  file_mime_type        String
-  expiry_date           DateTime?
-  uploaded_by_manager_id String?
-  uploaded_by           User?    @relation(fields: [uploaded_by_manager_id], references: [id], name: "uploaded_by")
-  alert_sent_at         DateTime?
-  created_at            DateTime @default(now())
-  deleted_at            DateTime? // Soft delete for GDPR
-
-  @@index([worker_id])
-  @@index([hotel_id])
-  @@index([document_type])
-  @@index([expiry_date])
-  @@index([deleted_at])
-}
-
-model RequiredDocument {
-  id                String   @id @default(cuid())
-  hotel_id          String
-  hotel             Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  document_type     String
-  is_required       Boolean  @default(true)
-  renewal_frequency_days Int?
-  created_at        DateTime @default(now())
-
-  @@unique([hotel_id, document_type])
-  @@index([hotel_id])
-}
-
-model Payroll {
-  id                String   @id @default(cuid())
-  worker_id         String
-  worker            User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
-  hotel_id          String
-  hotel             Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  pay_period_start  DateTime
-  pay_period_end    DateTime
-  gross_salary      Decimal  @db.Decimal(10, 2)
-  gross_currency    String   @default("EUR")
-  status            String   @default("draft") // "draft", "calculated", "approved", "paid", "archived"
-  encrypted_data    Bytes?   // All sensitive data encrypted AES-256
-  encryption_key_id String?  // Reference to encryption key (not actual key)
-  created_at        DateTime @default(now())
-  paid_at           DateTime?
-  updated_at        DateTime @updatedAt
-  deleted_at        DateTime? // Soft delete for archival/compliance
-
-  // Relations
-  line_items        PayrollLineItem[]
-
-  @@unique([worker_id, pay_period_start, pay_period_end])
-  @@index([worker_id])
-  @@index([hotel_id])
-  @@index([status])
-  @@index([paid_at])
-  @@index([deleted_at])
-}
-
-model PayrollLineItem {
-  id          String   @id @default(cuid())
-  payroll_id  String
-  payroll     Payroll  @relation(fields: [payroll_id], references: [id], onDelete: Cascade)
-  description String
-  amount      Decimal  @db.Decimal(10, 2)
-  amount_type String   // "gross", "deduction", "addition"
-  created_at  DateTime @default(now())
-
-  @@index([payroll_id])
-}
-
-model DataRetentionLog {
-  id                    String   @id @default(cuid())
-  worker_id             String
-  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Restrict)
-  data_category         String   // "CONTRACT", "PAYROLL", "DOCUMENTS", etc
-  hire_date             DateTime
-  retention_end_date    DateTime // When data MUST be deleted
-  retention_years       Int      // 3 for contracts, 7 for payroll, etc
-  status                String   @default("PENDING") // "PENDING", "REMINDER_SENT", "DELETED", "EXCEPTION"
-  reminder_sent_at      DateTime?
-  deleted_at            DateTime?
-  deletion_reason       String?
-  created_at            DateTime @default(now())
-  updated_at            DateTime @updatedAt
-
-  @@index([worker_id])
-  @@index([retention_end_date])
-  @@index([status])
-}
-
-// ============================================
-// STAFFING MODULE
-// ============================================
-
-model WorkRequest {
-  id                    String   @id @default(cuid())
-  hotel_id              String
-  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  created_by_manager_id String
-  created_by            User     @relation(fields: [created_by_manager_id], references: [id])
-  position              String   // "cleaner", "checker", "housekeeper"
-  workers_needed        Int
-  shift_date            DateTime
-  shift_start_time      String   // HH:MM format
-  shift_end_time        String   // HH:MM format
-  notes                 String?
-  status                String   @default("OPEN") // "OPEN", "PARTIALLY_FILLED", "FILLED", "CANCELLED"
-  created_at            DateTime @default(now())
-  filled_at             DateTime?
-  cancelled_at          DateTime?
-
-  // Relations
-  assignments           WorkerAssignment[]
-
-  @@index([hotel_id])
-  @@index([created_by_manager_id])
-  @@index([status])
-  @@index([shift_date])
-}
-
-model WorkerAssignment {
-  id                    String   @id @default(cuid())
-  worker_id             String
-  worker                User     @relation(fields: [worker_id], references: [id], onDelete: Cascade)
-  work_request_id       String
-  work_request          WorkRequest @relation(fields: [work_request_id], references: [id], onDelete: Cascade)
-  assigned_by_manager_id String
-  assigned_by           User     @relation(fields: [assigned_by_manager_id], references: [id], name: "assigned_by")
-  status                String   @default("ASSIGNED") // "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "REASSIGNED"
-  assigned_at           DateTime @default(now())
-  started_at            DateTime?
-  completed_at          DateTime?
-  previous_assignment_id String? // For reassignments
-  reassigned_at         DateTime?
-
-  // Relations
-  daily_operations      DailyOperation[]
-
-  @@unique([ worker_id, status], where: { status: { in: ["ASSIGNED", "IN_PROGRESS"] } })
-  @@index([worker_id])
-  @@index([work_request_id])
-  @@index([status])
-  @@index([assigned_at])
-}
-
-model DailyOperation {
-  id                    String   @id @default(cuid())
-  worker_assignment_id  String
-  worker_assignment     WorkerAssignment @relation(fields: [worker_assignment_id], references: [id], onDelete: Cascade)
-  hotel_id              String
-  hotel                 Hotel    @relation(fields: [hotel_id], references: [id], onDelete: Cascade)
-  room_id               String
-  room                  Room     @relation(fields: [room_id], references: [id], onDelete: Cascade)
-  room_type             String?  // "single", "double", "suite"
-  tasks                 String?  // "change linens, clean bathroom, restock amenities"
-  status                String   @default("ASSIGNED") // "ASSIGNED", "IN_PROGRESS", "COMPLETED"
-  assigned_at           DateTime @default(now())
-  started_at            DateTime?
-  completed_at          DateTime?
-  created_by_manager_id String?
-  created_by            User?    @relation("created_by", fields: [created_by_manager_id], references: [id])
-
-  @@index([worker_assignment_id])
-  @@index([hotel_id])
-  @@index([room_id])
-  @@index([status])
-}
-
-// ============================================
+// =============================================================================
 // NOTIFICATIONS MODULE
-// ============================================
+// =============================================================================
 
+// SP-8: type promoted from String to NotificationType enum.
 model Notification {
-  id          String   @id @default(cuid())
-  user_id     String
-  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  type        String   // "TASK_ASSIGNED", "QUALITY_VERIFIED", "RATING_RECEIVED", etc
-  title       String
-  message     String
-  data        Json?    // Additional data (IDs, etc)
-  is_read     Boolean  @default(false)
-  read_at     DateTime?
-  created_at  DateTime @default(now())
+  id         String              @id @default(cuid())
+  user_id    String
+  user       User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  hotel_id   String?
+  hotel      Hotel?              @relation(fields: [hotel_id], references: [id], onDelete: SetNull)
+  type       NotificationType    // SP-8: was String
+  channel    NotificationChannel @default(IN_APP)
+  title      String
+  message    String
+  data       Json?               // resource IDs for deep-linking
+  is_read    Boolean             @default(false)
+  read_at    DateTime?
+  sent_at    DateTime?
+  expires_at DateTime?
+  created_at DateTime            @default(now())
 
   @@index([user_id])
-  @@index([is_read])
+  @@index([hotel_id])
+  @@index([type])
   @@index([created_at])
+  @@index([user_id, is_read]) // hot path: unread notification badge count
 }
 
-// ============================================
+// =============================================================================
 // COMPLIANCE MODULE
-// ============================================
+// =============================================================================
 
 model AuditLog {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   actor_id      String?
-  actor         User?    @relation(fields: [actor_id], references: [id], onDelete: SetNull)
-  actor_role    String?  // "worker", "manager", "checker", "admin"
-  action        String   // "VIEW", "DOWNLOAD", "EXPORT", "DELETE", "MODIFY"
+  actor         User?     @relation(fields: [actor_id], references: [id], onDelete: SetNull)
+  actor_role    UserRole?
+  action        String    // "CREATE" | "READ" | "UPDATE" | "DELETE" | "APPROVE" | "REJECT" | "ASSIGN"
   resource_id   String
-  resource_type String   // "CONTRACT", "PAYROLL", "DOCUMENT", "WORKER", etc
-  details       Json?
+  resource_type String    // "WORK_REQUEST" | "APPLICATION" | "ASSIGNMENT" | "ATTENDANCE" | "RATING" etc.
+  old_values    Json?     // previous state snapshot for UPDATE/DELETE
+  new_values    Json?     // new state snapshot for CREATE/UPDATE
+  details       Json?     // additional freeform context
   ip_address    String?
-  timestamp     DateTime @default(now())
+  user_agent    String?
+  timestamp     DateTime  @default(now())
 
+  // AuditLog rows are never mutated; no updated_at
   @@index([actor_id])
   @@index([action])
   @@index([resource_type])
   @@index([resource_id])
   @@index([timestamp])
-}
-
-model ConsentLog {
-  id              String   @id @default(cuid())
-  user_id         String
-  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  consent_type    String   // "PRIVACY_POLICY", "HR_DATA_PROCESSING", "PHOTO_STORAGE"
-  consent_given   Boolean
-  consent_version String   // "v1.0", "v1.1"
-  ip_address      String?
-  user_agent      String?
-  consent_source  String   // "web", "mobile", "in_person"
-  timestamp       DateTime @default(now())
-
-  @@index([user_id])
-  @@index([consent_type])
-  @@index([timestamp])
+  @@index([resource_type, resource_id]) // "full history of a resource"
 }
