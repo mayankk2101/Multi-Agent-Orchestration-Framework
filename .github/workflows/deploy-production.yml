@@ -52,9 +52,15 @@ jobs:
             cd backend
             npm ci --omit=dev
             npm run build
+            cd ../frontend
+            npm ci --omit=dev
+            npm run build
+            cd /opt/hotel-crm
             pm2 reload hotel-crm-api --update-env
+            pm2 restart hotel-crm-web --update-env
             sleep 10
             curl -sf http://localhost:3001/api/v1/health || { echo "Health check failed — rolling back"; pm2 restart hotel-crm-api; exit 1; }
+            curl -sf http://localhost:3000 > /dev/null || { echo "Frontend health check failed"; pm2 restart hotel-crm-web; exit 1; }
             echo "Production deploy successful: $(date -u)"
 
       - name: Tag release

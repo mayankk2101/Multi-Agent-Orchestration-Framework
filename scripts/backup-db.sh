@@ -15,6 +15,10 @@ set -a
 source "$SECRET_ENV"
 set +a
 
+# Map DO Spaces credentials to AWS CLI variables
+export AWS_ACCESS_KEY_ID="$DO_SPACES_KEY"
+export AWS_SECRET_ACCESS_KEY="$DO_SPACES_SECRET"
+
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_FILE="weekly/hotelcrm-${TIMESTAMP}.dump"
 

@@ -39,7 +39,13 @@ npm ci --omit=dev
 echo "==> [3/6] Build backend"
 npm run build
 
+echo "==> [3.5/6] Install and build frontend"
+cd "$APP_DIR/frontend"
+npm ci --omit=dev
+npm run build
+
 echo "==> [4/6] Run database migrations"
+cd "$APP_DIR/backend"
 set -a
 source "$SECRET_ENV"
 set +a
@@ -49,6 +55,7 @@ echo "==> [5/6] Start/reload application"
 cd "$APP_DIR"
 if pm2 list | grep -q "hotel-crm-api"; then
   pm2 reload hotel-crm-api --update-env
+  pm2 restart hotel-crm-web --update-env
 else
   pm2 start ecosystem.config.js --env production
   pm2 save
