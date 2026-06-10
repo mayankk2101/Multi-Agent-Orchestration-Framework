@@ -11,8 +11,8 @@ export function getPrisma(): PrismaClient {
       .then(() => {
         logger.info('Connected to database');
       })
-      .catch((error) => {
-        logger.error('Failed to connect to database', { error: error.message });
+      .catch((error: unknown) => {
+        logger.error('Failed to connect to database', { error: error instanceof Error ? error.message : String(error) });
         process.exit(1);
       });
   }

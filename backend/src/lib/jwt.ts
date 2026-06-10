@@ -3,7 +3,7 @@ import { getEnv } from '../config/env.js';
 import { logger } from './logger.js';
 
 export interface AccessTokenPayload {
-  sub: string; // user ID
+  sub: string;
   email: string;
   role: string;
   hotel_ids: string[];
@@ -13,7 +13,7 @@ export interface AccessTokenPayload {
 }
 
 export interface RefreshTokenPayload {
-  sub: string; // user ID
+  sub: string;
   type: 'refresh';
   iat: number;
   exp: number;
@@ -22,21 +22,22 @@ export interface RefreshTokenPayload {
 export interface JwtTokens {
   access_token: string;
   refresh_token: string;
-  expires_in: number; // seconds
+  expires_in: number;
 }
 
 export function signAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): string {
   const env = getEnv();
   return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_ACCESS_EXPIRY,
+    expiresIn: env.JWT_ACCESS_EXPIRY as any,
     algorithm: 'HS256',
   });
 }
 
 export function signRefreshToken(userId: string): string {
   const env = getEnv();
-  return jwt.sign({ sub: userId, type: 'refresh' }, env.JWT_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRY,
+  const secret = env.JWT_REFRESH_SECRET ?? env.JWT_SECRET;
+  return jwt.sign({ sub: userId, type: 'refresh' }, secret, {
+    expiresIn: env.JWT_REFRESH_EXPIRY as any,
     algorithm: 'HS256',
   });
 }
@@ -45,21 +46,13 @@ export function signTokens(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): Jw
   const env = getEnv();
   const access_token = signAccessToken(payload);
   const refresh_token = signRefreshToken(payload.sub);
+  const expirySeconds = parseExpiryToSeconds(env.JWT_ACCESS_EXPIRY);
 
-  // Calculate expiry in seconds (convert from human readable format)
-  const expiryStr = env.JWT_ACCESS_EXPIRY;
-  const expirySeconds = parseExpiryToSeconds(expiryStr);
-
-  return {
-    access_token,
-    refresh_token,
-    expires_in: expirySeconds,
-  };
+  return { access_token, refresh_token, expires_in: expirySeconds };
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload | null {
   const env = getEnv();
-
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET) as AccessTokenPayload;
     return decoded;
@@ -77,9 +70,9 @@ export function verifyAccessToken(token: string): AccessTokenPayload | null {
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
   const env = getEnv();
-
+  const secret = env.JWT_REFRESH_SECRET ?? env.JWT_SECRET;
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as RefreshTokenPayload;
+    const decoded = jwt.verify(token, secret) as RefreshTokenPayload;
     if (decoded.type !== 'refresh') {
       return null;
     }
@@ -98,32 +91,23 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload | null {
 
 export function extractTokenFromHeader(authHeader: string | undefined): string | null {
   if (!authHeader) return null;
-
   const parts = authHeader.split(' ');
   if (parts.length !== 2 || parts[0].toLowerCase() !== 'bearer') {
     return null;
   }
-
   return parts[1];
 }
 
-function parseExpiryToSeconds(expiryStr: string): number {
+export function parseExpiryToSeconds(expiryStr: string): number {
   const match = expiryStr.match(/^(\d+)([smhd])$/);
-  if (!match) return 3600; // default 1 hour
-
+  if (!match) return 3600;
   const value = parseInt(match[1], 10);
   const unit = match[2];
-
   switch (unit) {
-    case 's':
-      return value;
-    case 'm':
-      return value * 60;
-    case 'h':
-      return value * 3600;
-    case 'd':
-      return value * 86400;
-    default:
-      return 3600;
+    case 's': return value;
+    case 'm': return value * 60;
+    case 'h': return value * 3600;
+    case 'd': return value * 86400;
+    default: return 3600;
   }
 }

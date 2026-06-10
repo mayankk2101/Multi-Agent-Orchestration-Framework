@@ -13,8 +13,12 @@ const envSchema = z.object({
 
   // JWT
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  JWT_REFRESH_SECRET: z.string().min(32).optional(),
   JWT_ACCESS_EXPIRY: z.string().default('1h'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
+
+  // APNs (PATCH-05: base64 encoded private key)
+  APNS_PRIVATE_KEY_BASE64: z.string().optional(),
 
   // Logging
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
