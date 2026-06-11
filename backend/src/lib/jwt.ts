@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { getEnv } from '../config/env.js';
 import { logger } from './logger.js';
 
@@ -6,7 +6,6 @@ export interface AccessTokenPayload {
   sub: string;
   email: string;
   role: string;
-  hotel_ids: string[];
   permissions: string[];
   iat: number;
   exp: number;
@@ -28,7 +27,7 @@ export interface JwtTokens {
 export function signAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): string {
   const env = getEnv();
   return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_ACCESS_EXPIRY as any,
+    expiresIn: env.JWT_ACCESS_EXPIRY as SignOptions['expiresIn'],
     algorithm: 'HS256',
   });
 }
@@ -37,7 +36,7 @@ export function signRefreshToken(userId: string): string {
   const env = getEnv();
   const secret = env.JWT_REFRESH_SECRET ?? env.JWT_SECRET;
   return jwt.sign({ sub: userId, type: 'refresh' }, secret, {
-    expiresIn: env.JWT_REFRESH_EXPIRY as any,
+    expiresIn: env.JWT_REFRESH_EXPIRY as SignOptions['expiresIn'],
     algorithm: 'HS256',
   });
 }
@@ -98,7 +97,7 @@ export function extractTokenFromHeader(authHeader: string | undefined): string |
   return parts[1];
 }
 
-export function parseExpiryToSeconds(expiryStr: string): number {
+export export function parseExpiryToSeconds(expiryStr: string): number {
   const match = expiryStr.match(/^(\d+)([smhd])$/);
   if (!match) return 3600;
   const value = parseInt(match[1], 10);
