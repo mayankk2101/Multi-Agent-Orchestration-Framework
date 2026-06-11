@@ -19,7 +19,6 @@
 | `position` | TEXT | nullable |
 | `skills` | TEXT[] | default `{}` |
 | `enrolled_at` | TIMESTAMPTZ NOT NULL | default `now()` |
-| `invited_by_id` | TEXT | FK → `users.id` SetNull |
 
 **Unique:** `(hotel_id, worker_id)` — one roster row per worker per hotel.
 
@@ -53,8 +52,7 @@ All under `/api/v1`. Prefix `/crm/hotels` per canonical route mount.
 |--------|-------|-------|-------|
 | `GET` | `/hotels/:id/workers` | ADMIN, MANAGER | List all `HotelWorker` rows for hotel; support `?status=` filter |
 | `POST` | `/hotels/:id/workers` | ADMIN, MANAGER | Enroll worker → creates row with `status=INVITED`; body: `{ worker_id, position?, skills? }` |
-| `DELETE` | `/hotels/:id/workers/:worker_id` | ADMIN, MANAGER | Soft-remove: set `status=REMOVED`, do not hard-delete |
-| `PATCH` | `/hotels/:id/workers/:worker_id` | ADMIN, MANAGER | Update `status`, `position`, `skills` only |
+| `DELETE` | `/hotels/:id/workers/:worker_id` | ADMIN, MANAGER | Remove enrollment |
 
 **HotelWorker Response DTO** (per PATCH-05e):
 
@@ -66,8 +64,7 @@ All under `/api/v1`. Prefix `/crm/hotels` per canonical route mount.
   "status": "INVITED | ACTIVE | SUSPENDED | REMOVED",
   "position": "string | null",
   "skills": ["string"],
-  "enrolled_at": "string",
-  "invited_by_id": "string | null"
+  "enrolled_at": "string"
 }
 ```
 
@@ -82,10 +79,10 @@ All under `/api/v1`. Prefix `/crm/hotels` per canonical route mount.
 
 | Method | Behaviour |
 |--------|-----------|
-| `enroll(hotelId, workerId, invitedById, data)` | `upsert` on `(hotel_id, worker_id)`; if existing row is `REMOVED`, reset to `INVITED`; else create. Throws `ConflictError` if already `ACTIVE` or `INVITED`. |
+| `enroll(hotelId, workerId, data)` | `upsert` on `(hotel_id, worker_id)`; if existing row is `REMOVED`, reset to `INVITED`; else create. Throws `ConflictError` if already `ACTIVE` or `INVITED`. |
 | `listByHotel(hotelId, filters)` | `findMany` with optional `status`, `position` filters; scoped to `hotel_id`. |
 | `updateStatus(hotelId, workerId, newStatus)` | Validates lifecycle transition (see enum above); throws `InvalidStateTransitionError` on illegal moves. |
-| `remove(hotelId, workerId)` | Sets `status = REMOVED`. Hard delete is forbidden. |
+| `remove(hotelId, workerId)` | Removes enrollment. Behavior (hard delete vs. status transition to `REMOVED`) is an open implementation decision not specified by source documents. |
 | `checkMembership(userId, hotelId)` | Returns `HotelWorker` row where `worker_id = userId AND hotel_id = hotelId AND status = ACTIVE`, or `null`. Used by RBAC middleware. |
 
 ### `UserService` patches (Phase 4 dependency — noted here for sequencing)
@@ -114,17 +111,16 @@ if (!membership) throw new ForbiddenError('CANNOT_ACCESS_HOTEL');
 
 **Bypass rules (per RBAC matrix PATCH-07):**
 - `ADMIN` — bypasses all hotel membership checks.
-- `MANAGER` — bypasses membership check for their own hotel only when `hotel_id` matches a hotel they created or manage (verified via `Hotel.created_by_id`).
+- `MANAGER` — bypasses membership check and has access to all hotels they manage (per RBAC matrix — `API_SPEC_V1_PATCH_V2` PATCH-04 §4c). Implementation mechanism for "hotels they manage" is outside this checklist's scope.
 - `CHECKER`, `WORKER` — must have an `ACTIVE` `HotelWorker` row.
 
 ### Permission matrix for HotelWorker endpoints
 
 | Action | ADMIN | MANAGER | CHECKER | WORKER |
 |--------|-------|---------|---------|--------|
-| List workers (`GET /hotels/:id/workers`) | ✓ | ✓ (own hotel) | — | — |
-| Enroll worker (`POST /hotels/:id/workers`) | ✓ | ✓ (own hotel) | — | — |
-| Update status (`PATCH /hotels/:id/workers/:id`) | ✓ | ✓ (own hotel) | — | — |
-| Remove worker (`DELETE /hotels/:id/workers/:id`) | ✓ | ✓ (own hotel) | — | — |
+| List workers (`GET /hotels/:id/workers`) | ✓ | ✓ | — | — |
+| Enroll worker (`POST /hotels/:id/workers`) | ✓ | ✓ | — | — |
+| Remove worker (`DELETE /hotels/:id/workers/:id`) | ✓ | ✓ | — | — |
 
 ### JWT payload (transitional — Sprint 1)
 
@@ -139,25 +135,29 @@ if (!membership) throw new ForbiddenError('CANNOT_ACCESS_HOTEL');
 Run as a single Prisma migration named `hotelworker-v2`. Execute in this order:
 
 ```
-Step 1  CREATE TABLE hotel_workers (id, hotel_id, worker_id, status enum,
-         position, skills, enrolled_at, invited_by_id)
+Step 1  CREATE TYPE "HotelWorkerStatus" AS ENUM
+         ('INVITED', 'ACTIVE', 'SUSPENDED', 'REMOVED');
+         — must precede table creation (per PRISMA_SCHEMA_V2_FREEZE migration Step 1)
+
+Step 2  CREATE TABLE hotel_workers (id, hotel_id, worker_id,
+         status "HotelWorkerStatus" NOT NULL DEFAULT 'INVITED',
+         position TEXT, skills TEXT[] DEFAULT '{}',
+         enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now())
          with UNIQUE(hotel_id, worker_id) and FK constraints.
 
-Step 2  CREATE INDEX idx_hotel_workers_hotel ON hotel_workers(hotel_id)
-Step 3  CREATE INDEX idx_hotel_workers_worker ON hotel_workers(worker_id)
-Step 4  CREATE INDEX idx_hotel_workers_status ON hotel_workers(status)
+Step 3  CREATE INDEX idx_hotel_workers_hotel ON hotel_workers(hotel_id)
+Step 4  CREATE INDEX idx_hotel_workers_worker ON hotel_workers(worker_id)
+Step 5  CREATE INDEX idx_hotel_workers_status ON hotel_workers(status)
 
-Step 5  Data backfill — run BEFORE dropping hotel_ids:
+Step 6  Data backfill — run BEFORE dropping hotel_ids:
         INSERT INTO hotel_workers (hotel_id, worker_id, status, enrolled_at)
-        SELECT unnest(hotel_ids), id, 'ACTIVE', now()
+        SELECT unnest(hotel_ids), id, 'ACTIVE'::"HotelWorkerStatus", now()
         FROM users WHERE hotel_ids <> '{}'
         ON CONFLICT (hotel_id, worker_id) DO NOTHING;
 
-Step 6  ALTER TABLE users DROP COLUMN hotel_ids  — only after zero-NULL
+Step 7  ALTER TABLE users DROP COLUMN hotel_ids  — only after zero-NULL
         verification on hotel_workers rows and all code paths switched.
-
-Step 7  ALTER TABLE users DROP COLUMN permissions  — only after
-        ROLE_PERMISSIONS constants are live in permissions.ts.
+        Gated on Phase 4 (feat/users-v2) merged.
 ```
 
 **Pre-migration:** Tag `git tag pre-hotelworker-baseline` and dump DB.
@@ -172,15 +172,14 @@ Phases are hard-sequenced. Work within a phase may be parallelised.
 
 | # | Step | Gate |
 |---|------|------|
-| 1 | Write and run migration (Steps 1–5 only; keep `hotel_ids` column) | Prisma validate passes |
+| 1 | Write and run migration (Steps 1–6 only; keep `hotel_ids` column) | Prisma validate passes |
 | 2 | Implement `HotelWorkerService` (all 5 methods) | Migration live |
-| 3 | Implement controller + routes (`GET`, `POST`, `DELETE`, `PATCH`) | Service done |
+| 3 | Implement controller + routes (`GET`, `POST`, `DELETE`) | Service done |
 | 4 | Rewrite `checkHotelAccess` middleware to use DB query | Service `checkMembership` done |
 | 5 | Update `permissions.ts` — load from `ROLE_PERMISSIONS` constants, not JWT arrays | — |
-| 6 | Strip `hotel_ids` from all User response DTOs (7 endpoints) | — |
-| 7 | Rewrite `hotel-workers.test.ts`; patch `rbac.test.ts` mocks | Steps 2–5 done |
-| 8 | Gate: `tsc --noEmit` clean + all auth and hotel-worker tests pass | Step 7 done |
-| 9 | Run migration Steps 6–7 (drop columns) — **only after Phase 4 users-v2 is merged** | Phase 4 done |
+| 6 | Rewrite `hotel-workers.test.ts`; patch `rbac.test.ts` mocks | Steps 2–5 done |
+| 7 | Gate: `tsc --noEmit` clean + all auth and hotel-worker tests pass | Step 6 done |
+| 8 | Run migration Step 7 (`DROP COLUMN hotel_ids`) — **only after Phase 4 `feat/users-v2` is merged** | Phase 4 done |
 
 ---
 
@@ -188,8 +187,8 @@ Phases are hard-sequenced. Work within a phase may be parallelised.
 
 | Severity | Risk | Mitigation |
 |----------|------|------------|
-| **HIGH** | `hotel_ids` array is the only current membership record. If migration Step 5 (backfill) runs after Step 6 (column drop), hotel access is lost for all workers. | Run backfill (Step 5) and verify row counts **before** dropping the column. Steps 6–7 are gated on Phase 4 merge. |
-| **HIGH** | `checkHotelAccess` DB query adds a round-trip on every protected request. Under load this is a bottleneck if not cached. | Add a Redis/in-memory cache keyed on `(user_id, hotel_id)` with a short TTL (30 s). Cache invalidation on `updateStatus` and `remove`. |
+| **HIGH** | `hotel_ids` array is the only current membership record. If migration Step 6 (backfill) runs after Step 7 (column drop), hotel access is lost for all workers. | Run backfill (Step 6) and verify row counts **before** dropping the column. Step 7 is gated on Phase 4 merge. |
+| **HIGH** | `checkHotelAccess` DB query adds a round-trip on every protected request. Under sustained load this may become a bottleneck. | Flag for performance review before production rollout. Mitigation approach (cache layer, connection pooling, etc.) is outside this checklist's scope and requires its own sign-off. |
 | **MEDIUM** | `HotelWorkerStatus` lifecycle transitions are not enforced at DB level — only in the service. A direct `prisma.hotelWorker.update` call bypasses the guard. | All status writes must route through `HotelWorkerService.updateStatus`. Add a DB trigger on `hotel_workers` if the risk is deemed high enough post-MVP. |
 | **MEDIUM** | B-2 blocker: `WorkRequestStatus` in the API spec (PATCH-05b) exposes `OPEN\|CLOSED\|CANCELLED` (3 states) but the schema freeze mandates 6 states. This creates a DTO mismatch for any endpoint joining `WorkRequest` to `HotelWorker` queries. | Use the 6-state enum from the schema freeze. The API spec patch is a documentation error (schema L0 governs). No code change needed beyond using the correct enum. |
 | **MEDIUM** | `@@unique([hotel_id, worker_id])` prevents re-enrolling a `REMOVED` worker via a plain `create`. | `enroll()` must use `upsert`; detect `REMOVED` status and reset to `INVITED`. Document this explicitly in the service. |
