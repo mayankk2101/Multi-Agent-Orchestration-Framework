@@ -39,7 +39,13 @@ npm ci --omit=dev
 echo "==> [3/6] Build backend"
 npm run build
 
+echo "==> [3.5/6] Install and build frontend"
+cd "$APP_DIR/frontend"
+npm ci --omit=dev
+npm run build
+
 echo "==> [4/6] Run database migrations"
+cd "$APP_DIR/backend"
 set -a
 source "$SECRET_ENV"
 set +a
