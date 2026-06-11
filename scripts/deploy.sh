@@ -51,7 +51,12 @@ source "$SECRET_ENV"
 set +a
 npx prisma migrate deploy
 
-echo "==> [5/6] Start/reload application"
+echo "==> [5/7] Install and build frontend"
+cd "$APP_DIR/frontend"
+npm ci
+npm run build
+
+echo "==> [6/7] Start/reload application"
 cd "$APP_DIR"
 if pm2 list | grep -q "hotel-crm-api"; then
   pm2 reload hotel-crm-api --update-env
@@ -61,7 +66,7 @@ else
   pm2 save
 fi
 
-echo "==> [6/6] Health check"
+echo "==> [7/7] Health check"
 sleep 10
 HEALTH=$(curl -sf http://localhost:3001/api/v1/health 2>/dev/null || echo "FAILED")
 if echo "$HEALTH" | grep -q '"status":"ok"'; then
