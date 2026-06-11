@@ -8,7 +8,8 @@ import {
   ForbiddenError,
 } from '../../lib/errors.js';
 import { ROLE_PERMISSIONS, BCRYPT_ROUNDS } from '../../config/constants.js';
-import { SignupRequest, LoginRequest, RefreshTokenRequest, AuthResponse, UpdateProfileRequest } from './validation.js';
+import { SignupRequest, LoginRequest, RefreshTokenRequest, UpdateProfileRequest } from './validation.js';
+import { AuthResponse } from './types.js';
 
 export class AuthService extends BaseService {
   async signup(data: SignupRequest, ip?: string): Promise<AuthResponse> {
@@ -38,6 +39,7 @@ export class AuthService extends BaseService {
       sub: user.id,
       email: user.email,
       role: user.role.toLowerCase(),
+      hotel_ids: user.hotel_ids,
       permissions: user.permissions,
     });
 
@@ -89,6 +91,7 @@ export class AuthService extends BaseService {
       sub: user.id,
       email: user.email,
       role: user.role.toLowerCase(),
+      hotel_ids: user.hotel_ids,
       permissions: user.permissions,
     });
 
@@ -144,6 +147,7 @@ export class AuthService extends BaseService {
       sub: user.id,
       email: user.email,
       role: user.role.toLowerCase(),
+      hotel_ids: user.hotel_ids,
       permissions: user.permissions,
     });
 

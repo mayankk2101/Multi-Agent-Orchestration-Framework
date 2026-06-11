@@ -6,6 +6,7 @@ export interface AccessTokenPayload {
   sub: string;
   email: string;
   role: string;
+  hotel_ids: string[];
   permissions: string[];
   iat: number;
   exp: number;
@@ -97,7 +98,7 @@ export function extractTokenFromHeader(authHeader: string | undefined): string |
   return parts[1];
 }
 
-export export function parseExpiryToSeconds(expiryStr: string): number {
+export function parseExpiryToSeconds(expiryStr: string): number {
   const match = expiryStr.match(/^(\d+)([smhd])$/);
   if (!match) return 3600;
   const value = parseInt(match[1], 10);
