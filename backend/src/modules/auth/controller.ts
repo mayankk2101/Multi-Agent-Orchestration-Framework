@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from './service.js';
-import { SignupSchema, LoginSchema, RefreshTokenSchema, UpdateProfileSchema } from './types.js';
+import { SignupSchema, LoginSchema, RefreshTokenSchema, UpdateProfileSchema } from './validation.js';
 import { validateBody } from '../../middleware/validation.js';
 import { UnauthorizedError } from '../../lib/errors.js';
 

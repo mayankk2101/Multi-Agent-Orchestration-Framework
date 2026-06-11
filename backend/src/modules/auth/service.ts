@@ -8,7 +8,7 @@ import {
   ForbiddenError,
 } from '../../lib/errors.js';
 import { ROLE_PERMISSIONS, BCRYPT_ROUNDS } from '../../config/constants.js';
-import { SignupRequest, LoginRequest, RefreshTokenRequest, AuthResponse, UpdateProfileRequest } from './types.js';
+import { SignupRequest, LoginRequest, RefreshTokenRequest, AuthResponse, UpdateProfileRequest } from './validation.js';
 
 export class AuthService extends BaseService {
   async signup(data: SignupRequest, ip?: string): Promise<AuthResponse> {
@@ -38,7 +38,6 @@ export class AuthService extends BaseService {
       sub: user.id,
       email: user.email,
       role: user.role.toLowerCase(),
-      hotel_ids: user.hotel_ids,
       permissions: user.permissions,
     });
 
@@ -58,11 +57,13 @@ export class AuthService extends BaseService {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
+        phone: user.phone,
+        profile_photo_url: user.profile_photo_url,
         role: user.role.toLowerCase(),
-        hotel_ids: user.hotel_ids,
         permissions: user.permissions,
         is_active: user.is_active,
         created_at: user.created_at.toISOString(),
+        updated_at: user.updated_at?.toISOString(),
       },
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -88,7 +89,6 @@ export class AuthService extends BaseService {
       sub: user.id,
       email: user.email,
       role: user.role.toLowerCase(),
-      hotel_ids: user.hotel_ids,
       permissions: user.permissions,
     });
 
@@ -108,11 +108,13 @@ export class AuthService extends BaseService {
         email: user.email,
         first_name: user.first_name,
         last_name: user.last_name,
+        phone: user.phone,
+        profile_photo_url: user.profile_photo_url,
         role: user.role.toLowerCase(),
-        hotel_ids: user.hotel_ids,
         permissions: user.permissions,
         is_active: user.is_active,
         created_at: user.created_at.toISOString(),
+        updated_at: user.updated_at?.toISOString(),
       },
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -142,7 +144,6 @@ export class AuthService extends BaseService {
       sub: user.id,
       email: user.email,
       role: user.role.toLowerCase(),
-      hotel_ids: user.hotel_ids,
       permissions: user.permissions,
     });
 
@@ -183,7 +184,6 @@ export class AuthService extends BaseService {
         phone: true,
         profile_photo_url: true,
         role: true,
-        hotel_ids: true,
         permissions: true,
         is_active: true,
         created_at: true,
@@ -214,7 +214,6 @@ export class AuthService extends BaseService {
         phone: true,
         profile_photo_url: true,
         role: true,
-        hotel_ids: true,
         permissions: true,
         is_active: true,
         updated_at: true,

@@ -39,11 +39,6 @@ npm ci --omit=dev
 echo "==> [3/6] Build backend"
 npm run build
 
-echo "==> [3.5/6] Install and build frontend"
-cd "$APP_DIR/frontend"
-npm ci --omit=dev
-npm run build
-
 echo "==> [4/6] Run database migrations"
 cd "$APP_DIR/backend"
 set -a
@@ -51,12 +46,12 @@ source "$SECRET_ENV"
 set +a
 npx prisma migrate deploy
 
-echo "==> [5/7] Install and build frontend"
+echo "==> [5/6] Install and build frontend"
 cd "$APP_DIR/frontend"
-npm ci
+npm ci --omit=dev
 npm run build
 
-echo "==> [6/7] Start/reload application"
+echo "==> [6/6] Start/reload application"
 cd "$APP_DIR"
 if pm2 list | grep -q "hotel-crm-api"; then
   pm2 reload hotel-crm-api --update-env
@@ -66,7 +61,7 @@ else
   pm2 save
 fi
 
-echo "==> [7/7] Health check"
+echo "==> Health check"
 sleep 10
 HEALTH=$(curl -sf http://localhost:3001/api/v1/health 2>/dev/null || echo "FAILED")
 if echo "$HEALTH" | grep -q '"status":"ok"'; then
