@@ -4,31 +4,27 @@ import { NotFoundError, ConflictError } from '../../lib/errors.js';
 import { EnrollWorkerInput, ListWorkersQuery, HotelWorkerDto } from './types.js';
 
 export class HotelWorkerService extends BaseService {
+  // Projects a HotelWorker row to the PATCH-05e response contract.
   private toDto(hw: {
     id: string;
     hotel_id: string;
     worker_id: string;
     position: string;
     status: HotelWorkerStatus;
-    hourly_rate: unknown;
-    currency: string;
-    notes: string | null;
     invited_at: Date;
     joined_at: Date | null;
     left_at: Date | null;
+    created_at: Date;
   }): HotelWorkerDto {
     return {
       id: hw.id,
       hotel_id: hw.hotel_id,
       worker_id: hw.worker_id,
-      position: hw.position,
-      status: hw.status,
-      hourly_rate: hw.hourly_rate != null ? String(hw.hourly_rate) : null,
-      currency: hw.currency,
-      notes: hw.notes,
-      invited_at: hw.invited_at.toISOString(),
-      joined_at: hw.joined_at ? hw.joined_at.toISOString() : null,
-      left_at: hw.left_at ? hw.left_at.toISOString() : null,
+      role: hw.position,
+      start_date: (hw.joined_at ?? hw.invited_at).toISOString(),
+      end_date: hw.left_at ? hw.left_at.toISOString() : null,
+      is_active: hw.status === HotelWorkerStatus.ACTIVE,
+      created_at: hw.created_at.toISOString(),
     };
   }
 

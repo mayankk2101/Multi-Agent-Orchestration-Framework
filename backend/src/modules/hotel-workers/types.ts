@@ -19,16 +19,14 @@ export const ListWorkersQuerySchema = z.object({
 
 export type ListWorkersQuery = z.infer<typeof ListWorkersQuerySchema>;
 
+// Response DTO per API_SPEC_V1_PATCH_V2 §PATCH-05e
 export interface HotelWorkerDto {
   id: string;
   hotel_id: string;
   worker_id: string;
-  position: string;
-  status: string;
-  hourly_rate: string | null;
-  currency: string;
-  notes: string | null;
-  invited_at: string;
-  joined_at: string | null;
-  left_at: string | null;
+  role: string;
+  start_date: string;
+  end_date: string | null;
+  is_active: boolean;
+  created_at: string;
 }
