@@ -152,18 +152,6 @@ export class CrmController {
     },
   ];
 
-  // Placeholder for task photo upload (Sprint 2)
-  async uploadPhoto(req: Request, res: Response, next: NextFunction) {
-    try {
-      res.status(501).json({
-        status: 'error',
-        error: { code: 'NOT_IMPLEMENTED', message: 'Photo upload scheduled for Sprint 2' },
-        meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
 }
 
 export const crmController = new CrmController();
