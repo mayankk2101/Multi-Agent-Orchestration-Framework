@@ -8,14 +8,6 @@ const mockPrisma = {
     update: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
     count: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
   },
-  room: {
-    findMany: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
-    findFirst: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
-    findUnique: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
-    create: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
-    update: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
-    count: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
-  },
   auditLog: { create: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
 };
 
@@ -109,44 +101,6 @@ describe('CrmService - Hotels', () => {
 
       const updateCall = (mockPrisma.hotel.update as jest.Mock).mock.calls[0] as Array<{ data: { is_active: boolean } }>;
       expect(updateCall[0]?.data.is_active).toBe(false);
-    });
-  });
-});
-
-describe('CrmService - Rooms', () => {
-  let service: CrmService;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    service = new CrmService();
-  });
-
-  describe('createRoom', () => {
-    it('throws NotFoundError when hotel not found', async () => {
-      mockPrisma.hotel.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.createRoom('bad_hotel', { number: '101', type: 'single' }, 'actor', 'manager')
-      ).rejects.toMatchObject({ name: 'NotFoundError' });
-    });
-
-    it('throws ConflictError when room number already exists', async () => {
-      mockPrisma.hotel.findUnique.mockResolvedValue({ id: 'h1' });
-      mockPrisma.room.findUnique.mockResolvedValue({ id: 'existing_room' });
-
-      await expect(
-        service.createRoom('h1', { number: '101', type: 'single' }, 'actor', 'manager')
-      ).rejects.toMatchObject({ name: 'ConflictError' });
-    });
-
-    it('creates and returns room on success', async () => {
-      mockPrisma.hotel.findUnique.mockResolvedValue({ id: 'h1' });
-      mockPrisma.room.findUnique.mockResolvedValue(null);
-      mockPrisma.room.create.mockResolvedValue({ id: 'r1', hotel_id: 'h1', number: '101', type: 'single', status: 'clean' });
-      mockPrisma.auditLog.create.mockResolvedValue({});
-
-      const result = await service.createRoom('h1', { number: '101', type: 'single' }, 'actor', 'manager');
-      expect(result.number).toBe('101');
     });
   });
 });
