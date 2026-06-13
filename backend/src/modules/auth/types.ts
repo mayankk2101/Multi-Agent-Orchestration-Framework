@@ -18,9 +18,4 @@ export interface AuthTokens {
   expires_in: number;
 }
 
-export interface AuthResponse {
-  user: AuthUser;
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
+export type AuthResponse = AuthTokens & { user: AuthUser };

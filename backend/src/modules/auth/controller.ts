@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from './service.js';
-import { SignupSchema, LoginSchema, RefreshTokenSchema, UpdateProfileSchema } from './validation.js';
+import { SignupSchema, LoginSchema, RefreshTokenSchema, UpdateProfileSchema, PasswordResetSchema } from './validation.js';
 import { validateBody } from '../../middleware/validation.js';
 import { UnauthorizedError } from '../../lib/errors.js';
 
@@ -81,6 +81,22 @@ export class AuthController {
       next(error);
     }
   }
+
+  passwordReset = [
+    validateBody(PasswordResetSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        await authService.resetPassword(req.body, req.ip);
+        res.status(200).json({
+          status: 'success',
+          data: { message: 'If that email exists, the password has been reset' },
+          meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+  ];
 
   updateProfile = [
     validateBody(UpdateProfileSchema),

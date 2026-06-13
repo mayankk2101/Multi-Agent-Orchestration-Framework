@@ -28,7 +28,16 @@ export const UpdateProfileSchema = z.object({
   profile_photo_url: z.string().url('Invalid URL').optional(),
 });
 
+export const PasswordResetSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  new_password: z.string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Password must contain at least one digit'),
+});
+
 export type SignupRequest = z.infer<typeof SignupSchema>;
 export type LoginRequest = z.infer<typeof LoginSchema>;
 export type RefreshTokenRequest = z.infer<typeof RefreshTokenSchema>;
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileSchema>;
+export type PasswordResetRequest = z.infer<typeof PasswordResetSchema>;

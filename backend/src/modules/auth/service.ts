@@ -8,7 +8,7 @@ import {
   ForbiddenError,
 } from '../../lib/errors.js';
 import { ROLE_PERMISSIONS, BCRYPT_ROUNDS } from '../../config/constants.js';
-import { SignupRequest, LoginRequest, RefreshTokenRequest, UpdateProfileRequest } from './validation.js';
+import { SignupRequest, LoginRequest, RefreshTokenRequest, UpdateProfileRequest, PasswordResetRequest } from './validation.js';
 import { AuthResponse } from './types.js';
 
 export class AuthService extends BaseService {
@@ -196,6 +196,23 @@ export class AuthService extends BaseService {
     });
     if (!user) throw new NotFoundError('User not found');
     return { ...user, role: user.role.toLowerCase() };
+  }
+
+  async resetPassword(data: PasswordResetRequest, ip?: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { email: data.email } });
+    if (!user || user.deleted_at || !user.is_active) {
+      // Return silently — do not reveal whether email exists
+      return;
+    }
+
+    const password_hash = await bcrypt.hash(data.new_password, BCRYPT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password_hash },
+    });
+
+    await this.prisma.session.deleteMany({ where: { user_id: user.id } });
+    await this.logAudit(user.id, user.role.toLowerCase(), 'MODIFY', 'USER', user.id, { action: 'password_reset' }, ip);
   }
 
   async updateProfile(userId: string, data: UpdateProfileRequest, ip?: string) {
