@@ -105,8 +105,8 @@ export class CrmService extends BaseService {
     const hotel = await this.prisma.hotel.findUnique({ where: { id: hotelId } });
     if (!hotel) throw new NotFoundError('Hotel not found');
 
-    // Soft-delete by deactivating
-    await this.prisma.hotel.update({ where: { id: hotelId }, data: { is_active: false } });
+    // Soft-delete: deactivate and record deletion timestamp
+    await this.prisma.hotel.update({ where: { id: hotelId }, data: { is_active: false, deleted_at: new Date() } });
     await this.logAudit(actorId, actorRole, 'DELETE', 'HOTEL', hotelId, { name: hotel.name }, ip);
   }
 
