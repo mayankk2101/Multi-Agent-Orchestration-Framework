@@ -1,9 +1,8 @@
 import { BaseService } from '../../lib/base-service.js';
-import { NotFoundError, ConflictError } from '../../lib/errors.js';
+import { NotFoundError } from '../../lib/errors.js';
 import {
   CreateHotelRequest, UpdateHotelRequest,
-  CreateRoomRequest, UpdateRoomRequest,
-  ListHotelsQuery, ListRoomsQuery,
+  ListHotelsQuery,
 } from './types.js';
 
 export class CrmService extends BaseService {
@@ -38,7 +37,6 @@ export class CrmService extends BaseService {
           id: true, name: true, city: true, country: true,
           address: true, timezone: true, is_active: true,
           created_at: true, updated_at: true,
-          _count: { select: { rooms: true } },
         },
       }),
       this.prisma.hotel.count({ where }),
@@ -58,7 +56,6 @@ export class CrmService extends BaseService {
   async getHotel(hotelId: string, actorId: string, actorRole: string, ip?: string) {
     const hotel = await this.prisma.hotel.findUnique({
       where: { id: hotelId },
-      include: { _count: { select: { rooms: true } } },
     });
     if (!hotel) throw new NotFoundError('Hotel not found');
 
@@ -108,79 +105,6 @@ export class CrmService extends BaseService {
     // Soft-delete: deactivate and record deletion timestamp
     await this.prisma.hotel.update({ where: { id: hotelId }, data: { is_active: false, deleted_at: new Date() } });
     await this.logAudit(actorId, actorRole, 'DELETE', 'HOTEL', hotelId, { name: hotel.name }, ip);
-  }
-
-  // ── Rooms ──────────────────────────────────────────────────────────────────
-
-  async listRooms(hotelId: string, query: ListRoomsQuery) {
-    const { page, limit, status, type } = query;
-    const skip = (page - 1) * limit;
-
-    const hotel = await this.prisma.hotel.findUnique({ where: { id: hotelId } });
-    if (!hotel) throw new NotFoundError('Hotel not found');
-
-    const where: Record<string, unknown> = { hotel_id: hotelId };
-    if (status) where['status'] = status;
-    if (type) where['type'] = type;
-
-    const [rooms, total] = await Promise.all([
-      this.prisma.room.findMany({ where, skip, take: limit, orderBy: { number: 'asc' } }),
-      this.prisma.room.count({ where }),
-    ]);
-
-    return {
-      rooms,
-      pagination: {
-        page, per_page: limit, total,
-        total_pages: Math.ceil(total / limit),
-        has_next: page * limit < total,
-        has_prev: page > 1,
-      },
-    };
-  }
-
-  async getRoom(hotelId: string, roomId: string) {
-    const room = await this.prisma.room.findFirst({ where: { id: roomId, hotel_id: hotelId } });
-    if (!room) throw new NotFoundError('Room not found');
-    return room;
-  }
-
-  async createRoom(hotelId: string, data: CreateRoomRequest, actorId: string, actorRole: string, ip?: string) {
-    const hotel = await this.prisma.hotel.findUnique({ where: { id: hotelId } });
-    if (!hotel) throw new NotFoundError('Hotel not found');
-
-    const existing = await this.prisma.room.findUnique({ where: { hotel_id_number: { hotel_id: hotelId, number: data.number } } });
-    if (existing) throw new ConflictError(`Room ${data.number} already exists in this hotel`);
-
-    const room = await this.prisma.room.create({
-      data: { hotel_id: hotelId, number: data.number, type: data.type, notes: data.notes },
-    });
-
-    await this.logAudit(actorId, actorRole, 'MODIFY', 'ROOM', room.id, { action: 'create', hotel_id: hotelId, number: data.number }, ip);
-    return room;
-  }
-
-  async updateRoom(hotelId: string, roomId: string, data: UpdateRoomRequest, actorId: string, actorRole: string, ip?: string) {
-    const room = await this.prisma.room.findFirst({ where: { id: roomId, hotel_id: hotelId } });
-    if (!room) throw new NotFoundError('Room not found');
-
-    if (data.number && data.number !== room.number) {
-      const conflict = await this.prisma.room.findUnique({ where: { hotel_id_number: { hotel_id: hotelId, number: data.number } } });
-      if (conflict) throw new ConflictError(`Room ${data.number} already exists in this hotel`);
-    }
-
-    const updated = await this.prisma.room.update({
-      where: { id: roomId },
-      data: {
-        number: data.number ?? room.number,
-        type: data.type ?? room.type,
-        status: data.status ?? room.status,
-        notes: data.notes ?? room.notes,
-      },
-    });
-
-    await this.logAudit(actorId, actorRole, 'MODIFY', 'ROOM', roomId, { fields: Object.keys(data) }, ip);
-    return updated;
   }
 }
 
