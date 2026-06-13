@@ -1,3 +1,4 @@
+import { Prisma, UserRole } from '@prisma/client';
 import { getPrisma } from './db.js';
 
 export class BaseService {
@@ -15,11 +16,11 @@ export class BaseService {
     await this.prisma.auditLog.create({
       data: {
         actor_id,
-        actor_role,
+        actor_role: actor_role as UserRole | null,
         action,
         resource_type,
         resource_id,
-        details: details || null,
+        details: details ? (details as Prisma.InputJsonValue) : Prisma.JsonNull,
         ip_address: ip_address || null,
         timestamp: new Date(),
       },
