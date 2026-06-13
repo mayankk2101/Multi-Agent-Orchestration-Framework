@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
+import { HotelWorkerStatus } from '@prisma/client';
 import { ForbiddenError, UnauthorizedError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import { getPrisma } from '../lib/db.js';
 
 export function requirePermission(permissions: string | string[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -92,19 +94,18 @@ export function requireRole(roles: string | string[]) {
 }
 
 export function checkHotelAccess() {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.auth) {
       next(new UnauthorizedError('Authentication required'));
       return;
     }
 
-    // Admins can access all hotels
-    if (req.auth.role === 'admin') {
+    // Admins and managers bypass hotel membership check (PATCH-04 §4c)
+    if (req.auth.role === 'admin' || req.auth.role === 'manager') {
       next();
       return;
     }
 
-    // For managers and other roles, check if they have access to the requested hotel
     const hotelId = req.params.hotel_id || req.query.hotel_id || req.body?.hotel_id;
 
     if (!hotelId) {
@@ -117,29 +118,38 @@ export function checkHotelAccess() {
       return;
     }
 
-    if (!req.auth.hotel_ids.includes(hotelId as string)) {
-      logger.warn('Hotel scope check denied', {
+    try {
+      const prisma = getPrisma();
+      const membership = await prisma.hotelWorker.findFirst({
+        where: {
+          hotel_id: hotelId as string,
+          worker_id: req.auth.userId,
+          status: HotelWorkerStatus.ACTIVE,
+        },
+        select: { id: true },
+      });
+
+      if (!membership) {
+        logger.warn('Hotel scope check denied', {
+          userId: req.auth.userId,
+          role: req.auth.role,
+          requestedHotel: hotelId,
+          requestId: req.requestId,
+        });
+        next(new ForbiddenError(`Cannot access hotel ${hotelId}`));
+        return;
+      }
+
+      logger.debug('Hotel scope check allowed', {
         userId: req.auth.userId,
         role: req.auth.role,
-        requestedHotel: hotelId,
-        allowedHotels: req.auth.hotel_ids,
+        hotelId,
         requestId: req.requestId,
       });
-      next(
-        new ForbiddenError(
-          `Cannot access hotel ${hotelId}. Allowed hotels: ${req.auth.hotel_ids.join(', ')}`
-        )
-      );
-      return;
+
+      next();
+    } catch (err) {
+      next(err);
     }
-
-    logger.debug('Hotel scope check allowed', {
-      userId: req.auth.userId,
-      role: req.auth.role,
-      hotelId,
-      requestId: req.requestId,
-    });
-
-    next();
   };
 }
