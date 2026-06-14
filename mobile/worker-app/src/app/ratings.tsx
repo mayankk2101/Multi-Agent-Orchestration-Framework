@@ -1,0 +1,83 @@
+import { StyleSheet, FlatList, ActivityIndicator, Pressable, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { api } from '@/lib/api';
+import { Spacing } from '@/constants/theme';
+import type { LeaderboardEntry } from '@/types/api';
+
+const MEDAL = ['🥇', '🥈', '🥉'];
+
+export default function RatingsScreen() {
+  const router = useRouter();
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.analytics.leaderboard()
+      .then((res) => setEntries(Array.isArray(res) ? res : []))
+      .catch(() => setEntries([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
+        <Pressable onPress={() => router.back()} style={styles.back}>
+          <ThemedText type="small" themeColor="textSecondary">← Back</ThemedText>
+        </Pressable>
+        <ThemedText type="subtitle" style={styles.header}>Leaderboard</ThemedText>
+        {loading ? (
+          <ActivityIndicator style={styles.loader} />
+        ) : (
+          <FlatList
+            data={entries}
+            keyExtractor={(_, i) => String(i)}
+            renderItem={({ item, index }) => (
+              <ThemedView type="backgroundElement" style={styles.card}>
+                <View style={styles.rankContainer}>
+                  <ThemedText type="smallBold" style={styles.rank}>
+                    {index < 3 ? MEDAL[index] : `#${item.rank}`}
+                  </ThemedText>
+                </View>
+                <View style={styles.info}>
+                  <ThemedText type="smallBold">
+                    {item.worker
+                      ? `${item.worker.first_name} ${item.worker.last_name}`
+                      : item.worker_id}
+                  </ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {item.average_rating.toFixed(1)} ★ · {item.shifts_completed} shifts completed
+                  </ThemedText>
+                </View>
+              </ThemedView>
+            )}
+            ListEmptyComponent={
+              <ThemedView type="backgroundElement" style={styles.empty}>
+                <ThemedText type="small" themeColor="textSecondary">No leaderboard data yet.</ThemedText>
+              </ThemedView>
+            }
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </SafeAreaView>
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  safeArea: { flex: 1, paddingHorizontal: Spacing.four, paddingTop: Spacing.four },
+  back: { marginBottom: Spacing.three },
+  header: { marginBottom: Spacing.three },
+  loader: { marginTop: Spacing.six },
+  list: { gap: Spacing.two, paddingBottom: Spacing.six },
+  card: { borderRadius: Spacing.two, padding: Spacing.three, flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  rankContainer: { width: 36, alignItems: 'center' },
+  rank: { fontSize: 18 },
+  info: { flex: 1, gap: Spacing.one },
+  empty: { borderRadius: Spacing.two, padding: Spacing.four, alignItems: 'center', marginTop: Spacing.four },
+});

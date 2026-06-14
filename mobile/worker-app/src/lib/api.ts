@@ -1,4 +1,15 @@
-import type { User, AuthResponse } from '@/types/api';
+import type {
+  User,
+  AuthResponse,
+  WorkRequest,
+  WorkApplication,
+  WorkerAssignment,
+  Attendance,
+  Notification,
+  LeaderboardEntry,
+  DashboardStats,
+  PaginatedResponse,
+} from '@/types/api';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
@@ -57,5 +68,65 @@ export const api = {
       }),
     logout: () => request<void>('/auth/logout', { method: 'POST' }),
     me: () => request<User>('/auth/me'),
+  },
+  workRequests: {
+    list: (params?: { status?: string; page?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set('status', params.status);
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      const q = qs.toString();
+      return request<PaginatedResponse<WorkRequest>>(`/work-requests${q ? `?${q}` : ''}`);
+    },
+    get: (id: string) => request<WorkRequest>(`/work-requests/${id}`),
+  },
+  applications: {
+    apply: (workRequestId: string) =>
+      request<WorkApplication>(`/work-requests/${workRequestId}/applications`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+    withdraw: (workRequestId: string, applicationId: string) =>
+      request<WorkApplication>(`/work-requests/${workRequestId}/applications/${applicationId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'WITHDRAWN' }),
+      }),
+  },
+  assignments: {
+    list: (params?: { page?: number; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.page) qs.set('page', String(params.page));
+      if (params?.limit) qs.set('limit', String(params.limit));
+      const q = qs.toString();
+      return request<PaginatedResponse<WorkerAssignment>>(`/assignments${q ? `?${q}` : ''}`);
+    },
+    get: (id: string) => request<WorkerAssignment>(`/assignments/${id}`),
+    updateStatus: (id: string, status: string) =>
+      request<WorkerAssignment>(`/assignments/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+  },
+  attendance: {
+    checkIn: (assignmentId: string) =>
+      request<Attendance>('/attendance', {
+        method: 'POST',
+        body: JSON.stringify({ assignment_id: assignmentId }),
+      }),
+    checkOut: (attendanceId: string) =>
+      request<Attendance>(`/attendance/${attendanceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ check_out_time: new Date().toISOString() }),
+      }),
+    get: (id: string) => request<Attendance>(`/attendance/${id}`),
+  },
+  notifications: {
+    list: () => request<Notification[]>('/notifications'),
+    markRead: (notificationId: string) =>
+      request<Notification>(`/notifications/${notificationId}/read`, { method: 'POST' }),
+  },
+  analytics: {
+    stats: () => request<DashboardStats>('/analytics/stats'),
+    leaderboard: () => request<LeaderboardEntry[]>('/analytics/leaderboard'),
   },
 };
