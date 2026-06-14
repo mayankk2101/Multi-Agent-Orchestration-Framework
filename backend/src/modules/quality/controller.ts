@@ -17,7 +17,11 @@ export class QualityController {
 
   async createRating(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await qualityService.createRating(req.body);
+      if (!req.auth) throw new Error('Not authenticated');
+      const result = await qualityService.createRating(req.body, {
+        userId: req.auth.userId,
+        role: req.auth.role,
+      });
       res.status(201).json({
         status: 'success',
         data: result,
