@@ -81,7 +81,7 @@ export class AttendanceService extends BaseService {
       ...(query.is_verified !== undefined ? { is_verified: query.is_verified } : {}),
     };
 
-    if (actor.role !== 'admin' && actor.role !== 'manager') {
+    if (actor.role !== 'admin' && actor.role !== 'manager' && actor.role !== 'checker') {
       where.worker_id = actor.userId;
     } else if (query.worker_id) {
       where.worker_id = query.worker_id;
@@ -125,7 +125,7 @@ export class AttendanceService extends BaseService {
     const record = await this.prisma.attendance.findUnique({ where: { id } });
     if (!record) throw new NotFoundError('Attendance record not found');
 
-    const isWorker = actorRole !== 'admin' && actorRole !== 'manager';
+    const isWorker = actorRole !== 'admin' && actorRole !== 'manager' && actorRole !== 'checker';
 
     if (isWorker) {
       if (record.worker_id !== actorId) {

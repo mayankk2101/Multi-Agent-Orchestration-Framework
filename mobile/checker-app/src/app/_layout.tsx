@@ -22,7 +22,23 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack>
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(app)" options={{ headerShown: false }} />
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="attendance/[id]"
+          options={{ title: 'Attendance Detail', headerShown: true }}
+        />
+        <Stack.Screen
+          name="quality/[id]"
+          options={{ title: 'Quality Check', headerShown: true }}
+        />
+        <Stack.Screen
+          name="rating/[id]"
+          options={{ title: 'Rate Worker', headerShown: true }}
+        />
+      </Stack>
     </ThemeProvider>
   );
 }

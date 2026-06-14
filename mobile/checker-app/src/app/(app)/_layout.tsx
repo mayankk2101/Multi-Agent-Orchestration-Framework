@@ -8,8 +8,11 @@ export default function AppLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
         tabBarStyle: { backgroundColor: theme.background },
+        headerStyle: { backgroundColor: theme.background },
+        headerTitleStyle: { color: theme.text },
+        headerShadowVisible: false,
         tabBarActiveTintColor: theme.text,
         tabBarInactiveTintColor: theme.textSecondary,
       }}
@@ -17,10 +20,36 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Inspections',
+          title: 'Queue',
           tabBarIcon: ({ color, size }) => (
             <SymbolView
-              name={{ ios: 'magnifyingglass.circle', android: 'search', web: 'search' }}
+              name={{ ios: 'list.bullet.clipboard', android: 'assignment', web: 'assignment' }}
+              tintColor={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="leaderboard"
+        options={{
+          title: 'Leaderboard',
+          tabBarIcon: ({ color, size }) => (
+            <SymbolView
+              name={{ ios: 'trophy', android: 'emoji_events', web: 'emoji_events' }}
+              tintColor={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Alerts',
+          tabBarIcon: ({ color, size }) => (
+            <SymbolView
+              name={{ ios: 'bell', android: 'notifications', web: 'notifications' }}
               tintColor={color}
               size={size}
             />

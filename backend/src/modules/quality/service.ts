@@ -1,6 +1,6 @@
-import { AssignmentStatus, AttendanceStatus, Prisma } from '@prisma/client';
+import { AssignmentStatus, AttendanceStatus, HotelWorkerStatus, Prisma } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
-import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import type { CreateRatingRequest } from './types.js';
 
 interface Actor {
@@ -9,8 +9,57 @@ interface Actor {
 }
 
 export class QualityService extends BaseService {
-  async createVerification(_data: Record<string, unknown>) {
-    throw new Error('Not implemented');
+  async createVerification(
+    data: Record<string, unknown>,
+    actor: Actor
+  ) {
+    const { assignment_id, score, notes, status } = data as {
+      assignment_id: string;
+      score: number;
+      notes?: string;
+      status?: string;
+    };
+
+    if (!assignment_id) throw new ValidationError('assignment_id is required');
+    if (!Number.isInteger(Number(score)) || Number(score) < 0 || Number(score) > 100) {
+      throw new ValidationError('score must be an integer between 0 and 100');
+    }
+
+    const assignment = await this.prisma.workerAssignment.findUnique({
+      where: { id: assignment_id },
+    });
+    if (!assignment) throw new NotFoundError('Assignment not found');
+
+    const existing = await this.prisma.qualityVerification.findUnique({
+      where: { assignment_id },
+    });
+    if (existing) throw new ConflictError('Verification already exists for this assignment');
+
+    const numScore = Number(score);
+    const derivedStatus =
+      status ?? (numScore >= 70 ? 'PASSED' : numScore >= 40 ? 'NEEDS_REWORK' : 'FAILED');
+
+    const verification = await this.prisma.qualityVerification.create({
+      data: {
+        assignment_id,
+        hotel_id: assignment.hotel_id,
+        verified_by_id: actor.userId,
+        score: numScore,
+        status: derivedStatus as any,
+        notes: notes ?? null,
+      },
+    });
+
+    await this.logAudit(
+      actor.userId,
+      actor.role,
+      'CREATE_VERIFICATION',
+      'QUALITY_VERIFICATION',
+      verification.id,
+      { assignment_id }
+    );
+
+    return verification;
   }
 
   async createRating(data: CreateRatingRequest, actor: Actor) {
@@ -31,7 +80,6 @@ export class QualityService extends BaseService {
       if (!assignment) {
         throw new NotFoundError('Assignment not found');
       }
-      // REM-03: the rated worker must be the worker on the assignment.
       if (assignment.worker_id !== worker_id) {
         throw new ForbiddenError('worker_id does not match the assignment worker');
       }
@@ -50,8 +98,6 @@ export class QualityService extends BaseService {
         },
       });
 
-      // REM-05: recompute the materialised aggregate from live DB counts.
-      // REM-06: use typed Prisma enums (AssignmentStatus / AttendanceStatus) — no `as any`.
       const [agg, totalAssignments, completedAssignments, onTimeAttendance, lastWorked] =
         await Promise.all([
           tx.rating.aggregate({
@@ -80,7 +126,6 @@ export class QualityService extends BaseService {
       const averageScore = agg._avg.score ?? 0;
       const completionRate = totalAssignments > 0 ? completedAssignments / totalAssignments : 0;
       const onTimeRate = totalAssignments > 0 ? onTimeAttendance / totalAssignments : 0;
-      const lastWorkedAt = lastWorked?.completed_at ?? null;
 
       const aggregateData = {
         average_score: averageScore,
@@ -88,7 +133,7 @@ export class QualityService extends BaseService {
         total_assignments: totalAssignments,
         completion_rate: completionRate,
         on_time_rate: onTimeRate,
-        last_worked_at: lastWorkedAt,
+        last_worked_at: lastWorked?.completed_at ?? null,
       };
 
       await tx.workerOverallRating.upsert({
@@ -109,8 +154,27 @@ export class QualityService extends BaseService {
     return rating;
   }
 
-  async getLeaderboard(_hotelId: string) {
-    throw new Error('Not implemented');
+  async getLeaderboard(hotelId: string) {
+    const where = hotelId
+      ? {
+          worker: {
+            hotel_workers: {
+              some: { hotel_id: hotelId, status: HotelWorkerStatus.ACTIVE },
+            },
+          },
+        }
+      : {};
+
+    return this.prisma.workerOverallRating.findMany({
+      where,
+      include: {
+        worker: {
+          select: { id: true, first_name: true, last_name: true, email: true },
+        },
+      },
+      orderBy: { average_score: 'desc' },
+      take: 50,
+    });
   }
 }
 
