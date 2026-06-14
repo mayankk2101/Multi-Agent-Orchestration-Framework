@@ -3,13 +3,15 @@ module.exports = {
     {
       name: 'hotel-crm-api',
       script: './backend/dist/server.js',
+      // node_args loads /etc/hotel-crm/.env into process.env at startup via
+      // Node 20's built-in --env-file flag; replaces the non-native env_file key.
+      node_args: '--env-file=/etc/hotel-crm/.env',
       cwd: '/opt/hotel-crm',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
       watch: false,
       max_memory_restart: '700M',
-      env_file: '/etc/hotel-crm/.env',
       env_production: {
         NODE_ENV: 'production',
         PORT: 3001,
@@ -21,7 +23,7 @@ module.exports = {
     },
     {
       name: 'hotel-crm-web',
-      script: 'node_modules/.bin/next',
+      script: './node_modules/.bin/next',
       args: 'start -p 3000',
       cwd: '/opt/hotel-crm/frontend',
       instances: 1,
@@ -29,7 +31,6 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '512M',
-      env_file: '/etc/hotel-crm/.env',
       env_production: {
         NODE_ENV: 'production',
         PORT: 3000,
