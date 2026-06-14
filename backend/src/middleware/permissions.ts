@@ -100,8 +100,9 @@ export function checkHotelAccess() {
       return;
     }
 
-    // Admins and managers bypass hotel membership check (PATCH-04 §4c)
-    if (req.auth.role === 'admin' || req.auth.role === 'manager') {
+    // Admins, managers, and checkers bypass hotel membership check (PATCH-04 §4c).
+    // Checkers are quality staff that operate across hotels and are not on the worker roster.
+    if (req.auth.role === 'admin' || req.auth.role === 'manager' || req.auth.role === 'checker') {
       next();
       return;
     }
