@@ -49,10 +49,28 @@ jobs:
             cd /opt/hotel-crm
             git fetch origin develop
             git checkout origin/develop
-            cd backend
+
+            # Backend
+            cd /opt/hotel-crm/backend
             npm ci --omit=dev
             npm run build
+
+            # Frontend (B3 — was missing from staging deploy)
+            cd /opt/hotel-crm/frontend
+            npm ci --omit=dev
+            npm run build
+
+            # Source secrets so --update-env picks them up (B2 — ssh shell is non-login)
+            set -a
+            source /etc/hotel-crm/.env
+            set +a
+
+            cd /opt/hotel-crm
             pm2 restart hotel-crm-api --update-env
-            sleep 5
-            curl -sf http://localhost:3001/api/v1/health || { echo "Health check failed"; exit 1; }
+            pm2 restart hotel-crm-web --update-env
+
+            # 15 s gives Node.js time to bind and run startup hooks (was 5 s — GAP-M15)
+            sleep 15
+            curl -sf http://localhost:3001/api/v1/health || { echo "API health check failed"; exit 1; }
+            curl -sf http://localhost:3000 > /dev/null || { echo "Frontend health check failed"; exit 1; }
             echo "Staging deploy successful: $(date -u)"

@@ -33,6 +33,11 @@ router.use('/notifications', notificationRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/calendar', calendarRoutes);
 
+// Health endpoint used by deploy scripts and GitHub Actions health checks
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 router.get('/status', (req, res) => {
   res.json({
     status: 'success',
