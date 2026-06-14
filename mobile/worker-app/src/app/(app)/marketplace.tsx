@@ -10,7 +10,6 @@ import { useTheme } from '@/hooks/use-theme';
 import type { WorkRequest } from '@/types/api';
 
 function JobCard({ item, onPress }: { item: WorkRequest; onPress: () => void }) {
-  const applied = !!item.my_application;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}>
       <ThemedView type="backgroundElement" style={styles.card}>
@@ -18,11 +17,6 @@ function JobCard({ item, onPress }: { item: WorkRequest; onPress: () => void }) 
           <ThemedText type="smallBold" style={styles.position}>
             {item.position}
           </ThemedText>
-          {applied && (
-            <ThemedView style={styles.appliedBadge}>
-              <ThemedText type="small" style={styles.appliedText}>Applied</ThemedText>
-            </ThemedView>
-          )}
         </ThemedView>
         {item.hotel && (
           <ThemedText type="small" themeColor="textSecondary">{item.hotel.name}</ThemedText>
@@ -52,7 +46,7 @@ export default function MarketplaceScreen() {
   const load = useCallback(async () => {
     try {
       const res = await api.workRequests.list({ status: 'OPEN', limit: 50 });
-      setItems(res.items ?? []);
+      setItems(Array.isArray(res) ? res : []);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -116,7 +110,5 @@ const styles = StyleSheet.create({
   card: { borderRadius: Spacing.two, padding: Spacing.three, gap: Spacing.one },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   position: { flex: 1 },
-  appliedBadge: { backgroundColor: '#38A169', borderRadius: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: 2 },
-  appliedText: { color: '#fff', fontSize: 11 },
   empty: { borderRadius: Spacing.two, padding: Spacing.four, alignItems: 'center', marginTop: Spacing.four },
 });

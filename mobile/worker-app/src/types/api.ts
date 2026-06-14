@@ -41,7 +41,6 @@ export interface WorkRequest {
   hourly_rate?: number;
   status: WorkRequestStatus;
   created_at: string;
-  my_application?: WorkApplication | null;
 }
 
 export interface WorkApplication {
@@ -103,9 +102,14 @@ export interface DashboardStats {
   pending_applications: number;
 }
 
-export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
+// Backend list endpoints return the array directly in body.data.
+// Pagination metadata (page, per_page, total) is in body.pagination but
+// is not extracted by the request() helper — use T[] for list calls.
+export interface BackendPagination {
   page: number;
-  limit: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
 }

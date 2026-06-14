@@ -8,7 +8,6 @@ import type {
   Notification,
   LeaderboardEntry,
   DashboardStats,
-  PaginatedResponse,
 } from '@/types/api';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
@@ -76,7 +75,7 @@ export const api = {
       if (params?.page) qs.set('page', String(params.page));
       if (params?.limit) qs.set('limit', String(params.limit));
       const q = qs.toString();
-      return request<PaginatedResponse<WorkRequest>>(`/work-requests${q ? `?${q}` : ''}`);
+      return request<WorkRequest[]>(`/work-requests${q ? `?${q}` : ''}`);
     },
     get: (id: string) => request<WorkRequest>(`/work-requests/${id}`),
   },
@@ -98,7 +97,7 @@ export const api = {
       if (params?.page) qs.set('page', String(params.page));
       if (params?.limit) qs.set('limit', String(params.limit));
       const q = qs.toString();
-      return request<PaginatedResponse<WorkerAssignment>>(`/assignments${q ? `?${q}` : ''}`);
+      return request<WorkerAssignment[]>(`/assignments${q ? `?${q}` : ''}`);
     },
     get: (id: string) => request<WorkerAssignment>(`/assignments/${id}`),
     updateStatus: (id: string, status: string) =>

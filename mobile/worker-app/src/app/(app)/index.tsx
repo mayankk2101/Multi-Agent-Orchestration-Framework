@@ -38,11 +38,8 @@ export default function DashboardScreen() {
       ]);
       if (statsRes.status === 'fulfilled') setStats(statsRes.value);
       if (shiftsRes.status === 'fulfilled') {
-        setUpcoming(
-          shiftsRes.value.items.filter((s) =>
-            ['CONFIRMED', 'IN_PROGRESS'].includes(s.status)
-          )
-        );
+        const all = Array.isArray(shiftsRes.value) ? shiftsRes.value : [];
+        setUpcoming(all.filter((s) => ['CONFIRMED', 'IN_PROGRESS'].includes(s.status)));
       }
     } finally {
       setLoading(false);

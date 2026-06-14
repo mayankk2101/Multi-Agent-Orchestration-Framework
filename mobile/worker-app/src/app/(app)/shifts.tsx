@@ -63,7 +63,7 @@ export default function ShiftsScreen() {
   const load = useCallback(async () => {
     try {
       const res = await api.assignments.list({ limit: 50 });
-      setItems(res.items ?? []);
+      setItems(Array.isArray(res) ? res : []);
     } finally {
       setLoading(false);
       setRefreshing(false);
