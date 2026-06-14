@@ -57,7 +57,7 @@ export function optionalAuthMiddleware(
         };
       }
     }
-  } catch (error) {
+  } catch (_error) {
     // Ignore auth errors for optional auth
   }
 
