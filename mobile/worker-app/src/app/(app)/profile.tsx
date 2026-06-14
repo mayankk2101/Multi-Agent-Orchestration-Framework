@@ -61,6 +61,15 @@ export default function ProfileScreen() {
         </ThemedView>
 
         <Pressable
+          onPress={() => router.push('/ratings')}
+          style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+        >
+          <ThemedView type="backgroundElement" style={styles.logoutButton}>
+            <ThemedText type="smallBold">View Leaderboard</ThemedText>
+          </ThemedView>
+        </Pressable>
+
+        <Pressable
           onPress={handleLogout}
           disabled={isLoggingOut}
           style={({ pressed }) => [{ opacity: pressed || isLoggingOut ? 0.7 : 1 }]}
