@@ -74,6 +74,14 @@ export class InternalServerError extends AppError {
   }
 }
 
+export class NotImplementedError extends AppError {
+  constructor(message: string = 'Not implemented') {
+    super(ERROR_CODES.NOT_IMPLEMENTED, HTTP_STATUS.NOT_IMPLEMENTED, message);
+    this.name = 'NotImplementedError';
+    Object.setPrototypeOf(this, NotImplementedError.prototype);
+  }
+}
+
 export class ServiceUnavailableError extends AppError {
   constructor(message: string = 'Service temporarily unavailable') {
     super(ERROR_CODES.SERVICE_UNAVAILABLE, HTTP_STATUS.SERVICE_UNAVAILABLE, message);

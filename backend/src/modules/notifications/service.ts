@@ -1,6 +1,6 @@
 import { NotificationType, Prisma } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
-import { NotFoundError } from '../../lib/errors.js';
+import { NotFoundError, NotImplementedError } from '../../lib/errors.js';
 import { NotificationPayload } from './types.js';
 
 export class NotificationService extends BaseService {
@@ -37,11 +37,11 @@ export class NotificationService extends BaseService {
   }
 
   async sendEmail(_email: string, _subject: string, _body: string) {
-    throw new Error('Not implemented');
+    throw new NotImplementedError('Email delivery is not yet implemented');
   }
 
   async sendPushNotification(_userId: string, _title: string, _body: string) {
-    throw new Error('Not implemented');
+    throw new NotImplementedError('Push notifications are not yet implemented');
   }
 }
 
