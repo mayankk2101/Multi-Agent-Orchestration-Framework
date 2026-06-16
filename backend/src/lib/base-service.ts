@@ -13,10 +13,13 @@ export class BaseService {
     details?: Record<string, unknown>,
     ip_address?: string
   ) {
+    const normalizedRole = actor_role
+      ? (actor_role.toUpperCase() as UserRole)
+      : null;
     await this.prisma.auditLog.create({
       data: {
         actor_id,
-        actor_role: actor_role as UserRole | null,
+        actor_role: normalizedRole,
         action,
         resource_type,
         resource_id,

@@ -49,7 +49,7 @@ export class AuthService extends BaseService {
       },
     });
 
-    await this.logAudit(user.id, user.role.toLowerCase(), 'SIGNUP', 'USER', user.id, { email: user.email }, ip);
+    await this.logAudit(user.id, user.role, 'SIGNUP', 'USER', user.id, { email: user.email }, ip);
 
     return {
       user: {
@@ -100,7 +100,7 @@ export class AuthService extends BaseService {
       },
     });
 
-    await this.logAudit(user.id, user.role.toLowerCase(), 'LOGIN', 'USER', user.id, { email: user.email }, ip);
+    await this.logAudit(user.id, user.role, 'LOGIN', 'USER', user.id, { email: user.email }, ip);
 
     return {
       user: {
@@ -208,7 +208,7 @@ export class AuthService extends BaseService {
     });
 
     await this.prisma.session.deleteMany({ where: { user_id: user.id } });
-    await this.logAudit(user.id, user.role.toLowerCase(), 'MODIFY', 'USER', user.id, { action: 'password_reset' }, ip);
+    await this.logAudit(user.id, user.role, 'MODIFY', 'USER', user.id, { action: 'password_reset' }, ip);
   }
 
   async updateProfile(userId: string, data: UpdateProfileRequest, ip?: string) {
@@ -237,7 +237,7 @@ export class AuthService extends BaseService {
       },
     });
 
-    await this.logAudit(userId, user.role.toLowerCase(), 'MODIFY', 'USER', userId, { fields: Object.keys(data) }, ip);
+    await this.logAudit(userId, user.role, 'MODIFY', 'USER', userId, { fields: Object.keys(data) }, ip);
     return { ...updated, role: updated.role.toLowerCase() };
   }
 }
