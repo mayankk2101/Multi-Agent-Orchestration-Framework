@@ -33,6 +33,14 @@ export function setOnAuthFailure(cb: () => Promise<void>): void {
   _onAuthFailure = cb;
 }
 
+export function getAccessToken(): string | null {
+  return _accessToken;
+}
+
+export function getRefreshToken(): string | null {
+  return _refreshToken;
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly code: string,
@@ -79,36 +87,49 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     if (res.status === 401 && !SKIP_REFRESH_PATHS.has(path) && _refreshToken) {
+      // Isolate refresh failure from persistence failure (F1).
+      // Only a server-rejected refresh is a genuine session expiry.
+      let tokens: { access_token: string; refresh_token: string };
       try {
         if (!_refreshPromise) {
           _refreshPromise = executeRefresh().finally(() => {
             _refreshPromise = null;
           });
         }
-        const tokens = await _refreshPromise;
-        _accessToken = tokens.access_token;
-        _refreshToken = tokens.refresh_token;
-        await _onTokenRefreshed?.(tokens.access_token, tokens.refresh_token);
-
-        // Replay the original request with the new access token
-        const retryHeaders: Record<string, string> = {
-          ...headers,
-          Authorization: `Bearer ${_accessToken}`,
-        };
-        const retryRes = await fetch(`${BASE_URL}${path}`, { ...options, headers: retryHeaders });
-        const retryBody = await retryRes.json();
-        if (!retryRes.ok) {
-          throw new ApiError(
-            retryBody.error?.code ?? 'UNKNOWN',
-            retryBody.error?.message ?? 'Request failed',
-            retryRes.status,
-          );
-        }
-        return retryBody.data as T;
+        tokens = await _refreshPromise;
       } catch {
+        // Server rejected the refresh token — genuine session expiry.
         await _onAuthFailure?.();
         throw new ApiError('SESSION_EXPIRED', 'Session expired. Please log in again.', 401);
       }
+
+      // Refresh succeeded — update in-memory tokens before any await.
+      _accessToken = tokens.access_token;
+      _refreshToken = tokens.refresh_token;
+
+      // Persist to storage. Failure is non-fatal: in-memory tokens are current
+      // and the session continues. Do not call onAuthFailure on a storage error.
+      try {
+        await _onTokenRefreshed?.(tokens.access_token, tokens.refresh_token);
+      } catch {
+        // Storage write failed; session continues with in-memory tokens.
+      }
+
+      // Replay the original request with the new access token.
+      const retryHeaders: Record<string, string> = {
+        ...headers,
+        Authorization: `Bearer ${_accessToken}`,
+      };
+      const retryRes = await fetch(`${BASE_URL}${path}`, { ...options, headers: retryHeaders });
+      const retryBody = await retryRes.json();
+      if (!retryRes.ok) {
+        throw new ApiError(
+          retryBody.error?.code ?? 'UNKNOWN',
+          retryBody.error?.message ?? 'Request failed',
+          retryRes.status,
+        );
+      }
+      return retryBody.data as T;
     }
 
     throw new ApiError(

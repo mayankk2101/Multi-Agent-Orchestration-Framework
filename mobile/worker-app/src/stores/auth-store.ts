@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
-import { api, setAccessToken, setRefreshToken, setOnTokenRefreshed, setOnAuthFailure } from '@/lib/api';
+import { api, setAccessToken, setRefreshToken, setOnTokenRefreshed, setOnAuthFailure, getAccessToken, getRefreshToken } from '@/lib/api';
 import type { User } from '@/types/api';
 
 const KEYS = {
@@ -37,7 +37,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         setRefreshToken(refreshToken);
         try {
           const user = await api.auth.me();
-          set({ user, accessToken, refreshToken, isInitialized: true });
+          // Read tokens from the module mirror after me() returns: a transparent startup
+          // refresh inside request() updates _accessToken/_refreshToken before returning,
+          // so these values are always current regardless of whether a refresh occurred.
+          set({ user, accessToken: getAccessToken(), refreshToken: getRefreshToken(), isInitialized: true });
           return;
         } catch {
           setAccessToken(null);
