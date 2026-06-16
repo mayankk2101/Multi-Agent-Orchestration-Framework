@@ -18,7 +18,8 @@ export class AnalyticsController {
 
   async getDashboardStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await analyticsService.getDashboardStats(req.params.hotel_id);
+      const hotelId = req.params.hotel_id ?? (req.query.hotel_id as string | undefined);
+      const result = await analyticsService.getDashboardStats(hotelId);
       res.status(200).json({
         status: 'success',
         data: result,
