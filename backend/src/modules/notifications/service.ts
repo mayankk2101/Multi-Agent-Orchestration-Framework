@@ -1,9 +1,19 @@
+import { NotificationType, Prisma } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { NotFoundError } from '../../lib/errors.js';
+import { NotificationPayload } from './types.js';
 
 export class NotificationService extends BaseService {
-  async sendNotification(_userId: string, _payload: Record<string, unknown>) {
-    throw new Error('Not implemented');
+  async sendNotification(userId: string, payload: NotificationPayload) {
+    return this.prisma.notification.create({
+      data: {
+        user_id: userId,
+        type: payload.type as NotificationType,
+        title: payload.title,
+        message: payload.message,
+        data: payload.data ? (payload.data as Prisma.InputJsonValue) : Prisma.JsonNull,
+      },
+    });
   }
 
   async getNotifications(userId: string) {

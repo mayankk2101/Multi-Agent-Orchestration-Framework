@@ -1,6 +1,7 @@
 import { Prisma, Attendance, AttendanceStatus } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { notificationService } from '../notifications/service.js';
 import { AttendanceDto, CheckInInput, ListAttendanceQuery, UpdateAttendanceInput } from './types.js';
 
 export class AttendanceService extends BaseService {
@@ -180,6 +181,24 @@ export class AttendanceService extends BaseService {
     await this.logAudit(actorId, actorRole, 'UPDATE_ATTENDANCE', 'ATTENDANCE', id, {
       worker_id: record.worker_id,
     });
+
+    if (!isWorker) {
+      if (input.is_verified === true) {
+        void notificationService.sendNotification(record.worker_id, {
+          type: 'ATTENDANCE_VERIFIED',
+          title: 'Attendance Verified',
+          message: 'Your attendance has been verified by a manager.',
+          data: { attendance_id: id, assignment_id: record.assignment_id },
+        }).catch(() => {});
+      } else if (input.status === 'ABSENT') {
+        void notificationService.sendNotification(record.worker_id, {
+          type: 'WORKER_NO_SHOW',
+          title: 'Attendance Rejected',
+          message: 'Your attendance record has been marked as absent.',
+          data: { attendance_id: id, assignment_id: record.assignment_id },
+        }).catch(() => {});
+      }
+    }
 
     return this.toDto(updated);
   }

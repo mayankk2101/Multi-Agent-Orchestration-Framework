@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { notificationService } from '../notifications/service.js';
 import {
   ApplyWorkRequestInput,
   ListApplicationsQuery,
@@ -99,6 +100,13 @@ export class WorkApplicationService extends BaseService {
       work_request_id: workRequestId,
     });
 
+    void notificationService.sendNotification(wr.created_by_id, {
+      type: 'APPLICATION_RECEIVED',
+      title: 'New Application Received',
+      message: 'A worker has submitted an application for your work request.',
+      data: { application_id: app.id, work_request_id: workRequestId },
+    }).catch(() => {});
+
     return this.toDto(app);
   }
 
@@ -181,6 +189,15 @@ export class WorkApplicationService extends BaseService {
       work_request_id: workRequestId,
       worker_id: app.worker_id,
     });
+
+    if (input.status === 'REJECTED') {
+      void notificationService.sendNotification(app.worker_id, {
+        type: 'APPLICATION_REJECTED',
+        title: 'Application Rejected',
+        message: 'Your application has been rejected.',
+        data: { application_id: applicationId, work_request_id: workRequestId, rejection_reason: input.rejection_reason ?? null },
+      }).catch(() => {});
+    }
 
     return this.toDto(updated);
   }
@@ -276,6 +293,20 @@ export class WorkApplicationService extends BaseService {
       work_request_id: app.work_request_id,
       worker_id: app.worker_id,
     });
+
+    void notificationService.sendNotification(app.worker_id, {
+      type: 'APPLICATION_ACCEPTED',
+      title: 'Application Approved',
+      message: 'Your application has been approved.',
+      data: { application_id: app.id, work_request_id: app.work_request_id },
+    }).catch(() => {});
+
+    void notificationService.sendNotification(app.worker_id, {
+      type: 'ASSIGNMENT_CONFIRMED',
+      title: 'Assignment Confirmed',
+      message: 'You have been assigned to a shift.',
+      data: { work_request_id: app.work_request_id },
+    }).catch(() => {});
 
     return this.toDto(updatedApp);
   }
