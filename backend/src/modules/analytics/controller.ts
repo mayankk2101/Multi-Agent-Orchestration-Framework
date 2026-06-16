@@ -4,7 +4,7 @@ import { analyticsService } from './service.js';
 export class AnalyticsController {
   async getLeaderboard(req: Request, res: Response, next: NextFunction) {
     try {
-      const hotelId = req.query.hotel_id as string | undefined;
+      const hotelId = req.params.hotel_id ?? (req.query.hotel_id as string | undefined);
       const result = await analyticsService.getLeaderboard(hotelId);
       res.status(200).json({
         status: 'success',
