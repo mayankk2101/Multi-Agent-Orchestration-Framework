@@ -1,6 +1,7 @@
 import { AssignmentStatus, AttendanceStatus, HotelWorkerStatus, Prisma } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
+import { notificationService } from '../notifications/service.js';
 import type { CreateRatingRequest } from './types.js';
 
 interface Actor {
@@ -58,6 +59,20 @@ export class QualityService extends BaseService {
       verification.id,
       { assignment_id }
     );
+
+    const isPassed = derivedStatus === 'PASSED';
+    const isNeedsRework = derivedStatus === 'NEEDS_REWORK';
+
+    void notificationService.sendNotification(assignment.worker_id, {
+      type: isPassed ? 'QUALITY_VERIFICATION_SUBMITTED' : isNeedsRework ? 'REWORK_REQUIRED' : 'QUALITY_VERIFICATION_SUBMITTED',
+      title: isPassed ? 'Quality Check Passed' : isNeedsRework ? 'Rework Required' : 'Quality Check Failed',
+      message: isPassed
+        ? `Your work quality has been verified with a score of ${numScore}.`
+        : isNeedsRework
+        ? `Your work requires rework. Score: ${numScore}.`
+        : `Your work did not meet quality standards. Score: ${numScore}.`,
+      data: { verification_id: verification.id, assignment_id, score: numScore, status: derivedStatus },
+    }).catch(() => {});
 
     return verification;
   }

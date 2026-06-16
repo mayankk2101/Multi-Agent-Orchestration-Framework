@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { notificationService } from '../notifications/service.js';
 import {
   ApplyWorkRequestInput,
   ListApplicationsQuery,
@@ -99,6 +100,13 @@ export class WorkApplicationService extends BaseService {
       work_request_id: workRequestId,
     });
 
+    void notificationService.sendNotification(wr.created_by_id, {
+      type: 'APPLICATION_RECEIVED',
+      title: 'New Application Received',
+      message: 'A worker has submitted an application for your work request.',
+      data: { application_id: app.id, work_request_id: workRequestId },
+    }).catch(() => {});
+
     return this.toDto(app);
   }
 
@@ -182,6 +190,15 @@ export class WorkApplicationService extends BaseService {
       worker_id: app.worker_id,
     });
 
+    if (input.status === 'REJECTED') {
+      void notificationService.sendNotification(app.worker_id, {
+        type: 'APPLICATION_REJECTED',
+        title: 'Application Rejected',
+        message: 'Your application has been rejected.',
+        data: { application_id: applicationId, work_request_id: workRequestId, rejection_reason: input.rejection_reason ?? null },
+      }).catch(() => {});
+    }
+
     return this.toDto(updated);
   }
 
@@ -197,7 +214,7 @@ export class WorkApplicationService extends BaseService {
       throw new ConflictError('Work request is no longer accepting approvals');
     }
 
-    const updatedApp = await this.prisma.$transaction(async (tx) => {
+    const txResult = await this.prisma.$transaction(async (tx) => {
       // Optimistic-lock slot claim
       const claimed = await tx.workRequest.updateMany({
         where: {
@@ -269,15 +286,31 @@ export class WorkApplicationService extends BaseService {
         });
       }
 
-      return acceptedApp;
+      return { acceptedApp, assignment };
     });
+
+    const { acceptedApp, assignment: createdAssignment } = txResult;
 
     await this.logAudit(actorId, actorRole, 'APPLICATION_ACCEPTED', 'WORK_APPLICATION', app.id, {
       work_request_id: app.work_request_id,
       worker_id: app.worker_id,
     });
 
-    return this.toDto(updatedApp);
+    void notificationService.sendNotification(app.worker_id, {
+      type: 'APPLICATION_ACCEPTED',
+      title: 'Application Approved',
+      message: 'Your application has been approved.',
+      data: { application_id: app.id, work_request_id: app.work_request_id },
+    }).catch(() => {});
+
+    void notificationService.sendNotification(app.worker_id, {
+      type: 'ASSIGNMENT_CONFIRMED',
+      title: 'Assignment Confirmed',
+      message: 'You have been assigned to a shift.',
+      data: { assignment_id: createdAssignment.id, work_request_id: app.work_request_id },
+    }).catch(() => {});
+
+    return this.toDto(acceptedApp);
   }
 }
 
