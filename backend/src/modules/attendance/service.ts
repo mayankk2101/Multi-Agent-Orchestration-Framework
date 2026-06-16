@@ -191,11 +191,19 @@ export class AttendanceService extends BaseService {
           data: { attendance_id: id, assignment_id: record.assignment_id },
         }).catch(() => {});
       } else if (input.status === 'ABSENT') {
-        void notificationService.sendNotification(record.worker_id, {
-          type: 'WORKER_NO_SHOW',
-          title: 'Attendance Rejected',
-          message: 'Your attendance record has been marked as absent.',
-          data: { attendance_id: id, assignment_id: record.assignment_id },
+        // WORKER_NO_SHOW is manager-facing per schema intent — notify the assignment manager
+        this.prisma.workerAssignment.findUnique({
+          where: { id: record.assignment_id },
+          select: { assigned_by_id: true },
+        }).then((assignment) => {
+          if (assignment) {
+            void notificationService.sendNotification(assignment.assigned_by_id, {
+              type: 'WORKER_NO_SHOW',
+              title: 'Worker No-Show',
+              message: 'A worker did not attend their assigned shift.',
+              data: { attendance_id: id, assignment_id: record.assignment_id, worker_id: record.worker_id },
+            }).catch(() => {});
+          }
         }).catch(() => {});
       }
     }

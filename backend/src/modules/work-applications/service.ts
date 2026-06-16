@@ -214,7 +214,7 @@ export class WorkApplicationService extends BaseService {
       throw new ConflictError('Work request is no longer accepting approvals');
     }
 
-    const updatedApp = await this.prisma.$transaction(async (tx) => {
+    const txResult = await this.prisma.$transaction(async (tx) => {
       // Optimistic-lock slot claim
       const claimed = await tx.workRequest.updateMany({
         where: {
@@ -286,8 +286,10 @@ export class WorkApplicationService extends BaseService {
         });
       }
 
-      return acceptedApp;
+      return { acceptedApp, assignment };
     });
+
+    const { acceptedApp, assignment: createdAssignment } = txResult;
 
     await this.logAudit(actorId, actorRole, 'APPLICATION_ACCEPTED', 'WORK_APPLICATION', app.id, {
       work_request_id: app.work_request_id,
@@ -305,10 +307,10 @@ export class WorkApplicationService extends BaseService {
       type: 'ASSIGNMENT_CONFIRMED',
       title: 'Assignment Confirmed',
       message: 'You have been assigned to a shift.',
-      data: { work_request_id: app.work_request_id },
+      data: { assignment_id: createdAssignment.id, work_request_id: app.work_request_id },
     }).catch(() => {});
 
-    return this.toDto(updatedApp);
+    return this.toDto(acceptedApp);
   }
 }
 
