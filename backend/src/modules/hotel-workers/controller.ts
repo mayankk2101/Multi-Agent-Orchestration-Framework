@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import { HotelWorkerStatus } from '@prisma/client';
 import { HotelWorkerService } from './service.js';
-import { EnrollWorkerSchema, ListWorkersQuerySchema } from './types.js';
+import { EnrollWorkerSchema, ListWorkersQuerySchema, UpdateWorkerStatusSchema } from './types.js';
 import { ValidationError } from '../../lib/errors.js';
 
 const service = new HotelWorkerService();
@@ -46,6 +47,30 @@ export async function enrollWorker(req: Request, res: Response, next: NextFuncti
       req.auth!.role
     );
     res.status(201).json({
+      status: 'success',
+      data: result,
+      meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateWorkerStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const parsed = UpdateWorkerStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ValidationError('Invalid request body', parsed.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }))));
+      return;
+    }
+    const result = await service.updateStatus(
+      req.params.hotel_id,
+      req.params.worker_id,
+      HotelWorkerStatus[parsed.data.status as keyof typeof HotelWorkerStatus],
+      req.auth!.userId,
+      req.auth!.role
+    );
+    res.status(200).json({
       status: 'success',
       data: result,
       meta: { timestamp: new Date().toISOString(), request_id: req.requestId },

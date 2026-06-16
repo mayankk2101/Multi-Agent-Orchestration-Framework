@@ -19,6 +19,12 @@ export const ListWorkersQuerySchema = z.object({
 
 export type ListWorkersQuery = z.infer<typeof ListWorkersQuerySchema>;
 
+export const UpdateWorkerStatusSchema = z.object({
+  status: z.enum(['INVITED', 'ACTIVE', 'SUSPENDED', 'REMOVED']),
+});
+
+export type UpdateWorkerStatusInput = z.infer<typeof UpdateWorkerStatusSchema>;
+
 // Response DTO per API_SPEC_V1_PATCH_V2 §PATCH-05e
 export interface HotelWorkerDto {
   id: string;
