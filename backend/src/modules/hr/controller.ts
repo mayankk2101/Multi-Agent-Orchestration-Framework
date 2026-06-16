@@ -54,9 +54,14 @@ export class HrController {
     }
   }
 
-  async uploadDocument(_req: Request, _res: Response, next: NextFunction) {
+  async uploadDocument(req: Request, res: Response, next: NextFunction) {
     try {
-      throw new Error('Not implemented');
+      const result = await hrService.uploadDocument(req.params.worker_id, Buffer.alloc(0));
+      res.status(201).json({
+        status: 'success',
+        data: result,
+        meta: { timestamp: new Date().toISOString(), request_id: req.requestId },
+      });
     } catch (error) {
       next(error);
     }
