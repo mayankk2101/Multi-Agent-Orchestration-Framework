@@ -1,8 +1,8 @@
 import {
-  WorkerAssignmentStatus,
+  AssignmentStatus,
   WorkRequestStatus,
   AttendanceStatus,
-  QualityVerificationStatus,
+  VerificationStatus,
 } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { DashboardStats, HotelSummary, LeaderboardEntry } from './types.js';
@@ -19,7 +19,7 @@ export class AnalyticsService extends BaseService {
       }),
       this.prisma.workerAssignment.groupBy({
         by: ['worker_id'],
-        where: { ...scope, status: WorkerAssignmentStatus.COMPLETED },
+        where: { ...scope, status: AssignmentStatus.COMPLETED },
         _count: { id: true },
       }),
       this.prisma.rating.groupBy({
@@ -120,7 +120,7 @@ export class AnalyticsService extends BaseService {
         _avg: { score: true },
       }),
       this.prisma.qualityVerification.count({
-        where: { ...scope, status: QualityVerificationStatus.PASSED },
+        where: { ...scope, status: VerificationStatus.PASSED },
       }),
       this.prisma.qualityVerification.count({ where: scope }),
       this.prisma.rating.aggregate({
@@ -138,7 +138,7 @@ export class AnalyticsService extends BaseService {
     const asnMap = new Map(
       (
         assignmentsByStatus as Array<{
-          status: WorkerAssignmentStatus;
+          status: AssignmentStatus;
           _count: { id: number };
         }>
       ).map((a) => [a.status, a._count.id])
@@ -164,10 +164,10 @@ export class AnalyticsService extends BaseService {
       },
       assignments: {
         total: totalAssignments as number,
-        completed: asnMap.get(WorkerAssignmentStatus.COMPLETED) ?? 0,
-        in_progress: asnMap.get(WorkerAssignmentStatus.IN_PROGRESS) ?? 0,
-        no_show: asnMap.get(WorkerAssignmentStatus.NO_SHOW) ?? 0,
-        cancelled: asnMap.get(WorkerAssignmentStatus.CANCELLED) ?? 0,
+        completed: asnMap.get(AssignmentStatus.COMPLETED) ?? 0,
+        in_progress: asnMap.get(AssignmentStatus.IN_PROGRESS) ?? 0,
+        no_show: asnMap.get(AssignmentStatus.NO_SHOW) ?? 0,
+        cancelled: asnMap.get(AssignmentStatus.CANCELLED) ?? 0,
       },
       attendance: {
         total: totalAttendance as number,
@@ -220,7 +220,7 @@ export class AnalyticsService extends BaseService {
         _sum: { workers_needed: true, workers_confirmed: true },
       }),
       this.prisma.workerAssignment.count({
-        where: { hotel_id: hotelId, status: WorkerAssignmentStatus.IN_PROGRESS },
+        where: { hotel_id: hotelId, status: AssignmentStatus.IN_PROGRESS },
       }),
       this.prisma.attendance.groupBy({
         by: ['status'],
@@ -235,7 +235,7 @@ export class AnalyticsService extends BaseService {
         _avg: { score: true },
       }),
       this.prisma.qualityVerification.count({
-        where: { hotel_id: hotelId, status: QualityVerificationStatus.PASSED },
+        where: { hotel_id: hotelId, status: VerificationStatus.PASSED },
       }),
       this.prisma.qualityVerification.count({ where: { hotel_id: hotelId } }),
       this.getLeaderboard(hotelId),
