@@ -147,11 +147,11 @@ export class WorkRequestService extends BaseService {
     if (actor.role === 'worker' || actor.role === 'checker') {
       const app = await this.prisma.workApplication.findFirst({
         where: { work_request_id: id, worker_id: actor.userId },
-        select: { id: true, status: true, created_at: true },
-        orderBy: { created_at: 'desc' },
+        select: { id: true, status: true, applied_at: true },
+        orderBy: { applied_at: 'desc' },
       });
       dto.my_application = app
-        ? { id: app.id, status: app.status, created_at: app.created_at.toISOString() }
+        ? { id: app.id, status: app.status, created_at: app.applied_at.toISOString() }
         : null;
     }
 
