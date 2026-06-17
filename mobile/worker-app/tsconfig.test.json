@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["jest"],
+    "lib": ["es2020"],
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/__tests__/**/*.ts",
+    "src/__mocks__/**/*.ts",
+    "src/lib/**/*.ts",
+    "src/stores/**/*.ts",
+    "src/types/**/*.ts"
+  ]
+}
