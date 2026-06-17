@@ -25,7 +25,9 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install deps
-        run: npm ci --omit=dev
+        # Full install (incl. devDependencies): the Build step runs `tsc`,
+        # which is a devDependency. `--omit=dev` breaks `npm run build`.
+        run: npm ci
         working-directory: backend
 
       - name: Build
@@ -49,11 +51,13 @@ jobs:
             cd /opt/hotel-crm
             git fetch origin main
             git checkout origin/main
+            # Full install: `npm run build` (tsc) needs backend devDependencies
             cd backend
-            npm ci --omit=dev
+            npm ci
             npm run build
+            # Full install: `next build` needs typescript + tailwindcss + @tailwindcss/postcss
             cd ../frontend
-            npm ci --omit=dev
+            npm ci
             npm run build
             cd /opt/hotel-crm
             pm2 reload hotel-crm-api --update-env
