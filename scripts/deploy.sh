@@ -34,7 +34,9 @@ git checkout "$GIT_REF"
 
 echo "==> [2/6] Install backend dependencies"
 cd "$APP_DIR/backend"
-npm ci --omit=dev
+# Full install (incl. devDependencies): the build step runs `tsc`,
+# which is a devDependency. `--omit=dev` breaks `npm run build`.
+npm ci
 
 echo "==> [3/6] Build backend"
 npm run build
@@ -48,7 +50,8 @@ npx prisma migrate deploy
 
 echo "==> [5/6] Install and build frontend"
 cd "$APP_DIR/frontend"
-npm ci --omit=dev
+# Full install: `next build` needs typescript + tailwindcss + @tailwindcss/postcss
+npm ci
 npm run build
 
 echo "==> [6/6] Start/reload application"

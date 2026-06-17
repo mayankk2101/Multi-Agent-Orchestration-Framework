@@ -35,14 +35,14 @@ Before pushing, confirm:
 
 ```
 GitHub Actions runner (ubuntu-latest)
-  1. npm ci --omit=dev          (backend, runner)
+  1. npm ci                      (backend, runner — full install; build needs devDeps)
   2. npm run build               (backend TypeScript → dist/, runner)
   3. prisma migrate deploy       (runner → STAGING_DATABASE_URL)
 
 SSH into deploy@<STAGING_DROPLET_IP>
   4. git fetch origin develop && git checkout origin/develop
-  5. cd backend && npm ci --omit=dev && npm run build
-  6. cd frontend && npm ci --omit=dev && npm run build
+  5. cd backend && npm ci && npm run build
+  6. cd frontend && npm ci && npm run build
   7. source /etc/hotel-crm/.env  (loads secrets into shell)
   8. pm2 restart hotel-crm-api --update-env
   9. pm2 restart hotel-crm-web --update-env
@@ -162,8 +162,8 @@ ssh deploy@<STAGING_DROPLET_IP>
 cd /opt/hotel-crm
 git log --oneline -10                  # find the previous good commit SHA
 git checkout <SHA>
-cd backend && npm ci --omit=dev && npm run build
-cd ../frontend && npm ci --omit=dev && npm run build
+cd backend && npm ci && npm run build
+cd ../frontend && npm ci && npm run build
 cd /opt/hotel-crm
 set -a && source /etc/hotel-crm/.env && set +a
 pm2 restart hotel-crm-api --update-env
