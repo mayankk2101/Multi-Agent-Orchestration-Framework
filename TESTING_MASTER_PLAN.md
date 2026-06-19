@@ -1,4 +1,6 @@
 # TESTING MASTER PLAN
+
+> **⚠️ NOTE (2026-06-19).** Any references to mocking "DigitalOcean Spaces" in integration tests predate the migration to **AWS S3**. Mock the S3 client instead (the storage abstraction is unchanged). All other testing guidance remains valid.
 ## Hotel CRM — Marketplace Architecture
 
 **Status**: Implementation-Ready  

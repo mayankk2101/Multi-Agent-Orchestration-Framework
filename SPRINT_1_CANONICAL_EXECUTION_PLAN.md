@@ -1,5 +1,7 @@
 # Sprint 1 — Canonical Execution Plan
 
+> **⚠️ PARTIALLY SUPERSEDED — INFRASTRUCTURE REFERENCES ONLY (2026-06-19).** Item B-3 and any DigitalOcean Spaces / `DO_SPACES_*` references predate the migration to **AWS** (S3 + IAM). Re-read those items against `AWS_DEPLOYMENT_GUIDE.md`. Non-infrastructure backlog items remain valid.
+
 **Status:** CANONICAL — supersedes the reconciled inputs listed in §7.
 **Date:** 2026-06-10
 **Constraint:** No architecture redesign. No new governance. Reconciliation only.

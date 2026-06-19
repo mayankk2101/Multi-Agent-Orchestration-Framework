@@ -2,7 +2,7 @@
 
 **Version**: 1.0.0 (MVP - Phase 1)  
 **Status**: Architecture finalized, implementation in progress  
-**Deployment**: DigitalOcean (Frankfurt, Europe-only)
+**Deployment**: AWS (eu-central-1 / Frankfurt, Europe-only)
 
 ## Architecture Overview
 
@@ -95,7 +95,7 @@ module/
 - **Cache**: Redis (optional, performance layer only)
 - **Validation**: Zod
 - **Testing**: Jest + Supertest
-- **Deployment**: Docker (DigitalOcean)
+- **Deployment**: Docker on AWS EC2 (image in AWS ECR)
 
 ### Frontend
 - **Framework**: Next.js 14+
@@ -109,8 +109,8 @@ module/
 - **Deployment**: Expo EAS
 
 ### Database
-- **Primary**: PostgreSQL 15 (DigitalOcean Managed)
-- **Cache**: Redis 7 (DigitalOcean)
+- **Primary**: PostgreSQL 15 (AWS RDS PostgreSQL)
+- **Cache**: Redis 7 (on EC2 via Docker; AWS ElastiCache when scaling)
 
 ## Getting Started
 
@@ -192,7 +192,7 @@ npm run test:coverage     # Coverage report
 
 ### Database
 ✅ **Chosen**: PostgreSQL + Prisma
-- DigitalOcean Managed PostgreSQL (same db in dev/prod)
+- AWS RDS PostgreSQL (same db engine in dev/prod)
 - Prisma ORM for type-safe queries
 - No Supabase (avoid vendor lock-in)
 
@@ -203,11 +203,12 @@ npm run test:coverage     # Coverage report
 - Falls back to PostgreSQL queries
 
 ### Deployment
-✅ **Chosen**: DigitalOcean
-- Single server MVP (€87/month)
-- Frankfurt region (EU compliance)
-- Docker containers
-- Scale to App Platform when needed
+✅ **Chosen**: AWS
+- Single EC2 instance MVP
+- eu-central-1 (Frankfurt) region (EU compliance)
+- Docker containers, image stored in AWS ECR
+- RDS PostgreSQL for the database, S3 for uploads/documents
+- Scale horizontally behind an Application Load Balancer when needed
 
 ## Migration Path to Microservices (Phase 2+)
 
@@ -238,10 +239,11 @@ JWT_SECRET="your-secret-key-min-32-chars"
 NODE_ENV="development"
 LOG_LEVEL="debug"
 
-# DigitalOcean (production only)
-DO_SPACES_KEY=""
-DO_SPACES_SECRET=""
-DO_SPACES_BUCKET=""
+# AWS (production only)
+AWS_REGION="eu-central-1"
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY=""
+S3_BUCKET=""
 ```
 
 ## API Standards
@@ -281,7 +283,7 @@ All endpoints must check permissions. See `RBAC_PERMISSION_MATRIX.md` in `/docs/
 ## Monitoring & Logging
 
 - **Logs**: Structured JSON logs via Winston
-- **Monitoring**: DigitalOcean APM (Phase 2)
+- **Monitoring**: AWS CloudWatch (metrics, logs, alarms)
 - **Tracing**: OpenTelemetry (Phase 2)
 - **Alerts**: Uptime monitoring (Phase 2)
 
@@ -316,11 +318,15 @@ docker-compose up -d
 npm run dev
 ```
 
-### Production (DigitalOcean)
+### Production (AWS)
 ```bash
 docker build -t hotel-crm:latest .
-docker push registry.digitalocean.com/hotel-crm/backend:latest
-# Deploy via App Platform or manually to droplet
+# Authenticate to ECR, then push
+aws ecr get-login-password --region eu-central-1 \
+  | docker login --username AWS --password-stdin <account-id>.dkr.ecr.eu-central-1.amazonaws.com
+docker tag hotel-crm:latest <account-id>.dkr.ecr.eu-central-1.amazonaws.com/hotel-crm/backend:latest
+docker push <account-id>.dkr.ecr.eu-central-1.amazonaws.com/hotel-crm/backend:latest
+# Deploy to EC2 (pull image + restart). See AWS_DEPLOYMENT_GUIDE.md
 ```
 
 ## Troubleshooting

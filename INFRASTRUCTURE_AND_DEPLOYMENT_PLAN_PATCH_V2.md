@@ -1,5 +1,7 @@
 # INFRASTRUCTURE_AND_DEPLOYMENT_PLAN_PATCH_V2
 
+> **⚠️ SUPERSEDED — HISTORICAL RECORD (2026-06-19).** This document predates the platform migration to **AWS** and references DigitalOcean / Cloudflare infrastructure as it stood at the time. It is preserved unaltered as an audit/decision record. For the current deployment platform see `AWS_DEPLOYMENT_GUIDE.md`, `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`, and `AWS_DOCUMENTATION_AUDIT.md`. Do not use the DigitalOcean topology described below for new deployments.
+
 **Type:** Implementation Patch — applies all BLOCKER and MAJOR findings from PATCH_V1  
 **Supersedes:** Relevant sections of `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`  
 **Source audit:** `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN_PATCH_V1.md`  

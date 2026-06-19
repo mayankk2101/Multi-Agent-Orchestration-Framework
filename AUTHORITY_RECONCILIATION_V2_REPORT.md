@@ -1,5 +1,7 @@
 # AUTHORITY_RECONCILIATION_V2_REPORT
 
+> **⚠️ SUPERSEDED — HISTORICAL RECORD (2026-06-19).** This document predates the platform migration to **AWS** and references DigitalOcean / Cloudflare infrastructure as it stood at the time. It is preserved unaltered as an audit/decision record. For the current deployment platform see `AWS_DEPLOYMENT_GUIDE.md`, `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`, and `AWS_DOCUMENTATION_AUDIT.md`. Do not use the DigitalOcean topology described below for new deployments.
+
 **Generated:** 2026-06-10
 **Type:** Reconciliation only — no new architecture, no module redesign, no implementation plan
 **Trigger:** The six authority documents previously declared "NOT RECOVERED" have now been physically located and read.

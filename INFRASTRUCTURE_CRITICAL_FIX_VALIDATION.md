@@ -1,5 +1,7 @@
 # INFRASTRUCTURE CRITICAL FIX VALIDATION
 
+> **⚠️ SUPERSEDED — HISTORICAL RECORD (2026-06-19).** This document predates the platform migration to **AWS** and references DigitalOcean / Cloudflare infrastructure as it stood at the time. It is preserved unaltered as an audit/decision record. For the current deployment platform see `AWS_DEPLOYMENT_GUIDE.md`, `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`, and `AWS_DOCUMENTATION_AUDIT.md`. Do not use the DigitalOcean topology described below for new deployments.
+
 **Branch reviewed:** `claude/adoring-wright-dvz97n`
 **Reference document:** `INFRASTRUCTURE_IMPLEMENTATION_COMPLIANCE_REPORT.md`
 **Scope:** GAP-C1 through GAP-C6 only
