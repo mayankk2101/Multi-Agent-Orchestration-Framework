@@ -1,8 +1,39 @@
 import { Request, Response, NextFunction } from 'express';
-import { isAppError } from '../lib/errors.js';
+import { Prisma } from '@prisma/client';
+import {
+  AppError,
+  ConflictError,
+  InvalidRequestError,
+  NotFoundError,
+  ValidationError,
+  isAppError,
+} from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { HTTP_STATUS, ERROR_CODES } from '../config/constants.js';
 import { getEnv } from '../config/env.js';
+
+/**
+ * Maps known Prisma errors to AppError instances so the response formatting
+ * below stays centralized. Returns null for unrecognized errors.
+ */
+function mapPrismaError(error: Error): AppError | null {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    switch (error.code) {
+      case 'P2002':
+        return new ConflictError('A record with this value already exists');
+      case 'P2025':
+        return new NotFoundError('Resource not found');
+      case 'P2003':
+        return new ValidationError('Related record constraint failed');
+      default:
+        return null;
+    }
+  }
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return new InvalidRequestError('Invalid database request');
+  }
+  return null;
+}
 
 export function errorHandler(
   error: Error,
@@ -12,6 +43,12 @@ export function errorHandler(
 ): void {
   const env = getEnv();
   const request_id = req.requestId || 'unknown';
+
+  // Centralized Prisma error mapping: translate to AppError so formatting below applies
+  const mappedPrismaError = mapPrismaError(error);
+  if (mappedPrismaError) {
+    error = mappedPrismaError;
+  }
 
   // Log all errors
   if (isAppError(error)) {

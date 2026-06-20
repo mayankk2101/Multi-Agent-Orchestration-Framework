@@ -7,7 +7,9 @@ const router = Router();
 router.use(authMiddleware);
 
 // Contracts
-router.get('/contracts', (req, res, next) => hrController.listContracts(req, res, next));
+router.get('/contracts', requirePermission('hr:read'), (req, res, next) =>
+  hrController.listContracts(req, res, next)
+);
 router.post('/contracts', requirePermission('hr:write'), (req, res, next) =>
   hrController.createContract(req, res, next)
 );
