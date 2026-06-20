@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { notificationService } from './service.js';
+import { UnauthorizedError } from '../../lib/errors.js';
 
 export class NotificationController {
   async getNotifications(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.auth) throw new Error('Not authenticated');
+      if (!req.auth) throw new UnauthorizedError('Not authenticated');
       const result = await notificationService.getNotifications(req.auth.userId);
       res.status(200).json({
         status: 'success',
@@ -18,7 +19,7 @@ export class NotificationController {
 
   async markAsRead(req: Request, res: Response, next: NextFunction) {
     try {
-      if (!req.auth) throw new Error('Not authenticated');
+      if (!req.auth) throw new UnauthorizedError('Not authenticated');
       const result = await notificationService.markAsRead(req.params.notification_id, req.auth.userId);
       res.status(200).json({
         status: 'success',
