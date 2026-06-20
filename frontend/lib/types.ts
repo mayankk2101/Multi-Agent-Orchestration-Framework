@@ -247,3 +247,79 @@ export interface UpdateAssignmentInput {
   status?: "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   cancellation_reason?: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Attendance                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Attendance lifecycle. Mirrors the backend `AttendanceStatus` enum
+ * (prisma/schema.prisma). EXPECTED is the pre-shift state set when the
+ * record is created; check-in moves it to PRESENT or LATE. Managers may
+ * additionally set ABSENT, PARTIAL or EXCUSED during verification.
+ */
+export type AttendanceStatus =
+  | "EXPECTED"
+  | "PRESENT"
+  | "ABSENT"
+  | "LATE"
+  | "PARTIAL"
+  | "EXCUSED";
+
+/** Statuses a manager may assign during verification (EXPECTED is pre-shift). */
+export type AttendanceReviewStatus = Exclude<AttendanceStatus, "EXPECTED">;
+
+/**
+ * An attendance record as returned by `GET /attendance` and `/attendance/:id`.
+ * Shape mirrors the backend `AttendanceDto`.
+ */
+export interface Attendance {
+  id: string;
+  assignment_id: string;
+  worker_id: string;
+  hotel_id: string;
+  status: AttendanceStatus;
+  check_in_at: string | null;
+  check_out_at: string | null;
+  expected_start: string | null;
+  expected_end: string | null;
+  minutes_late: number | null;
+  minutes_worked: number | null;
+  notes: string | null;
+  is_verified: boolean;
+  verified_by_id: string | null;
+  verified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Query params accepted by `GET /attendance`. */
+export interface ListAttendanceQuery {
+  hotel_id?: string;
+  worker_id?: string;
+  assignment_id?: string;
+  status?: AttendanceStatus;
+  is_verified?: boolean;
+  page?: number;
+  per_page?: number;
+}
+
+/** Body of `POST /attendance` (worker check-in). */
+export interface CheckInInput {
+  assignment_id: string;
+  notes?: string;
+}
+
+/**
+ * Body of `PATCH /attendance/:id`. Workers may only set `check_out_at` and
+ * `notes`; the remaining fields are manager/checker-only verification fields
+ * enforced by the backend.
+ */
+export interface UpdateAttendanceInput {
+  check_out_at?: string;
+  notes?: string;
+  status?: AttendanceReviewStatus;
+  minutes_late?: number;
+  minutes_worked?: number;
+  is_verified?: boolean;
+}
