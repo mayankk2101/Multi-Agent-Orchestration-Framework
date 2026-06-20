@@ -3,82 +3,57 @@ import {
   WorkRequestStatus,
   AttendanceStatus,
   VerificationStatus,
+  HotelWorkerStatus,
 } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { DashboardStats, HotelSummary, LeaderboardEntry } from './types.js';
 
+interface OverallRatingRow {
+  worker_id: string;
+  average_score: number;
+  total_assignments: number;
+  completion_rate: number;
+  worker: { first_name: string; last_name: string };
+}
+
 export class AnalyticsService extends BaseService {
+  // Single source of truth for both /analytics/leaderboard and
+  // /quality/leaderboard: the transactionally-maintained WorkerOverallRating
+  // aggregate (written on every rating). This endpoint preserves its existing
+  // LeaderboardEntry contract while reading the same rows — and using the same
+  // average_score ordering — as /quality/leaderboard, so the two surfaces can
+  // never rank a worker differently.
   async getLeaderboard(hotelId?: string): Promise<LeaderboardEntry[]> {
-    const scope = hotelId ? { hotel_id: hotelId } : {};
+    const where = hotelId
+      ? {
+          worker: {
+            hotel_workers: {
+              some: { hotel_id: hotelId, status: HotelWorkerStatus.ACTIVE },
+            },
+          },
+        }
+      : {};
 
-    const [assignmentGroups, completedGroups, ratingGroups] = await Promise.all([
-      this.prisma.workerAssignment.groupBy({
-        by: ['worker_id'],
-        where: scope,
-        _count: { id: true },
-      }),
-      this.prisma.workerAssignment.groupBy({
-        by: ['worker_id'],
-        where: { ...scope, status: AssignmentStatus.COMPLETED },
-        _count: { id: true },
-      }),
-      this.prisma.rating.groupBy({
-        by: ['worker_id'],
-        where: scope,
-        _avg: { score: true },
-      }),
-    ]);
+    const rows = (await this.prisma.workerOverallRating.findMany({
+      where,
+      include: {
+        worker: { select: { first_name: true, last_name: true } },
+      },
+      orderBy: { average_score: 'desc' },
+      take: 50,
+    })) as OverallRatingRow[];
 
-    const workerIds = assignmentGroups.map((g: { worker_id: string }) => g.worker_id);
-    const workers = await this.prisma.user.findMany({
-      where: { id: { in: workerIds } },
-      select: { id: true, first_name: true, last_name: true },
+    return rows.map((row, idx): LeaderboardEntry => {
+      const total = row.total_assignments;
+      return {
+        worker_id: row.worker_id,
+        name: `${row.worker.first_name} ${row.worker.last_name}`,
+        total_tasks: total,
+        completed_tasks: Math.round(row.completion_rate * total),
+        average_rating: Math.round(row.average_score * 100) / 100,
+        position: idx + 1,
+      };
     });
-
-    const workerMap = new Map(
-      workers.map((w: { id: string; first_name: string; last_name: string }) => [
-        w.id,
-        `${w.first_name} ${w.last_name}`,
-      ])
-    );
-    const completedMap = new Map(
-      completedGroups.map((g: { worker_id: string; _count: { id: number } }) => [
-        g.worker_id,
-        g._count.id,
-      ])
-    );
-    const ratingMap = new Map(
-      ratingGroups.map((g: { worker_id: string; _avg: { score: number | null } }) => [
-        g.worker_id,
-        g._avg.score ?? 0,
-      ])
-    );
-
-    const entries = assignmentGroups
-      .map((g: { worker_id: string; _count: { id: number } }) => {
-        const total = g._count.id;
-        const completed = completedMap.get(g.worker_id) ?? 0;
-        const avgRating = ratingMap.get(g.worker_id) ?? 0;
-        return {
-          worker_id: g.worker_id,
-          name: workerMap.get(g.worker_id) ?? 'Unknown',
-          total_tasks: total,
-          completed_tasks: completed,
-          average_rating: Math.round((avgRating as number) * 100) / 100,
-          score: total > 0 ? ((completed as number) / (total as number)) * (avgRating as number) : 0,
-        };
-      })
-      .sort(
-        (a: { score: number }, b: { score: number }) => b.score - a.score
-      )
-      .map(
-        (
-          { score: _score, ...entry }: { score: number; worker_id: string; name: string; total_tasks: number; completed_tasks: number; average_rating: number },
-          idx: number
-        ): LeaderboardEntry => ({ ...entry, position: idx + 1 })
-      );
-
-    return entries;
   }
 
   async getDashboardStats(hotelId?: string): Promise<DashboardStats> {

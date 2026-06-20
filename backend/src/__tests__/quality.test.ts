@@ -17,15 +17,23 @@ const mockQualityVerification = {
 };
 const mockWorkerAssignment = {
   findUnique: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
+  count: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
+  findFirst: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
 };
 const mockRating = {
   create: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
   aggregate: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
 };
+const mockNotification = {
+  create: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
+};
 const mockPrisma = {
   qualityVerification: mockQualityVerification,
   workerAssignment: mockWorkerAssignment,
   rating: mockRating,
+  attendance: { count: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
+  workerOverallRating: { upsert: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
+  notification: mockNotification,
   auditLog: { create: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
   $transaction: jest.fn(async (cb: any) => cb(mockPrisma)) as jest.MockedFunction<(...args: any[]) => any>,
 };
@@ -315,5 +323,45 @@ describe('Quality createRating — duplicate rating handling (P1-02)', () => {
       name: 'ConflictError',
       message: 'Rating already exists for this assignment',
     });
+  });
+});
+
+describe('Quality createRating — RATING_RECEIVED notification (GAP-1)', () => {
+  let service: QualityService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new QualityService();
+    mockWorkerAssignment.findUnique.mockResolvedValue({
+      id: 'a1',
+      hotel_id: 'h1',
+      worker_id: 'w1',
+    });
+    mockWorkerAssignment.count.mockResolvedValue(1);
+    mockWorkerAssignment.findFirst.mockResolvedValue(null);
+    mockAttendance_count();
+    mockRating.create.mockResolvedValue({ id: 'r1' });
+    mockRating.aggregate.mockResolvedValue({ _avg: { score: 4 }, _count: 1 });
+    mockPrisma.workerOverallRating.upsert.mockResolvedValue({});
+    mockNotification.create.mockResolvedValue({ id: 'n1' });
+  });
+
+  function mockAttendance_count() {
+    (mockPrisma.attendance.count as jest.Mock).mockResolvedValue(1 as never);
+  }
+
+  it('emits RATING_RECEIVED to the rated worker after a successful rating', async () => {
+    await service.createRating(
+      { assignment_id: 'a1', worker_id: 'w1', score: 4 } as any,
+      { userId: 'u1', role: 'manager' }
+    );
+
+    // allow the fire-and-forget notification microtask to settle
+    await new Promise((r) => setImmediate(r));
+
+    expect(mockNotification.create).toHaveBeenCalledTimes(1);
+    const payload = mockNotification.create.mock.calls[0][0].data;
+    expect(payload.user_id).toBe('w1');
+    expect(payload.type).toBe('RATING_RECEIVED');
   });
 });
