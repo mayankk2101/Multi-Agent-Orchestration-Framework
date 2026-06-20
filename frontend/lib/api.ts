@@ -5,10 +5,13 @@ import type {
   AuthUser,
   CreateWorkRequestInput,
   HotelSummary,
+  ListApplicationsQuery,
   ListWorkRequestsQuery,
   LoginResponse,
   RefreshResponse,
+  UpdateApplicationInput,
   UpdateWorkRequestInput,
+  WorkApplication,
   WorkRequest,
 } from "@/lib/types";
 
@@ -206,6 +209,40 @@ export const workRequestsApi = {
     apiFetch<WorkRequest>(`/work-requests/${id}`, {
       method: "PATCH",
       body: { status: "OPEN" },
+    }),
+};
+
+/**
+ * Work applications API, nested under a work request and matching the
+ * backend `/work-requests/:id/applications/*` routes.
+ */
+export const workApplicationsApi = {
+  list: (workRequestId: string, query: ListApplicationsQuery = {}) =>
+    apiFetch<WorkApplication[]>(
+      `/work-requests/${workRequestId}/applications${toQuery({ ...query })}`,
+    ),
+
+  update: (
+    workRequestId: string,
+    applicationId: string,
+    input: UpdateApplicationInput,
+  ) =>
+    apiFetch<WorkApplication>(
+      `/work-requests/${workRequestId}/applications/${applicationId}`,
+      { method: "PATCH", body: input },
+    ),
+
+  /** Accept a PENDING application (claims a slot via the backend transaction). */
+  accept: (workRequestId: string, applicationId: string) =>
+    workApplicationsApi.update(workRequestId, applicationId, {
+      status: "ACCEPTED",
+    }),
+
+  /** Reject a PENDING application with an optional reason. */
+  reject: (workRequestId: string, applicationId: string, reason?: string) =>
+    workApplicationsApi.update(workRequestId, applicationId, {
+      status: "REJECTED",
+      ...(reason ? { rejection_reason: reason } : {}),
     }),
 };
 
