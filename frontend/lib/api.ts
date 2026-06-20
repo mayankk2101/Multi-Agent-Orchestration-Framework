@@ -2,14 +2,17 @@ import { API_BASE_URL } from "@/lib/config";
 import { useAuthStore } from "@/stores/auth";
 import type {
   ApiEnvelope,
+  Assignment,
   AuthUser,
   CreateWorkRequestInput,
   HotelSummary,
   ListApplicationsQuery,
+  ListAssignmentsQuery,
   ListWorkRequestsQuery,
   LoginResponse,
   RefreshResponse,
   UpdateApplicationInput,
+  UpdateAssignmentInput,
   UpdateWorkRequestInput,
   WorkApplication,
   WorkRequest,
@@ -243,6 +246,31 @@ export const workApplicationsApi = {
     workApplicationsApi.update(workRequestId, applicationId, {
       status: "REJECTED",
       ...(reason ? { rejection_reason: reason } : {}),
+    }),
+};
+
+/** Assignments API matching the backend `/assignments/*` routes. */
+export const assignmentsApi = {
+  list: (query: ListAssignmentsQuery = {}) =>
+    apiFetch<Assignment[]>(`/assignments${toQuery({ ...query })}`),
+
+  get: (id: string) => apiFetch<Assignment>(`/assignments/${id}`),
+
+  update: (id: string, input: UpdateAssignmentInput) =>
+    apiFetch<Assignment>(`/assignments/${id}`, { method: "PATCH", body: input }),
+
+  /** Transition a CONFIRMED assignment to IN_PROGRESS (start the shift). */
+  start: (id: string) =>
+    assignmentsApi.update(id, { status: "IN_PROGRESS" }),
+
+  /** Transition an IN_PROGRESS assignment to COMPLETED. */
+  complete: (id: string) => assignmentsApi.update(id, { status: "COMPLETED" }),
+
+  /** Cancel a CONFIRMED or IN_PROGRESS assignment with an optional reason. */
+  cancel: (id: string, reason?: string) =>
+    assignmentsApi.update(id, {
+      status: "CANCELLED",
+      ...(reason ? { cancellation_reason: reason } : {}),
     }),
 };
 
