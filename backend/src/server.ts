@@ -1,6 +1,6 @@
 import { loadEnv, getEnv } from './config/env.js';
 import { createApp } from './app.js';
-import { getPrisma, disconnectDb } from './lib/db.js';
+import { connectDb, disconnectDb } from './lib/db.js';
 import { logger } from './lib/logger.js';
 
 async function main() {
@@ -9,8 +9,10 @@ async function main() {
     loadEnv();
     const env = getEnv();
 
-    // Connect to database
-    getPrisma();
+    // Verify database connectivity BEFORE the server starts listening so the
+    // process fails fast (and the orchestrator restarts it) instead of
+    // accepting requests against an unconfirmed connection.
+    await connectDb();
 
     // Create app
     const app = createApp();
@@ -62,13 +64,24 @@ async function main() {
       process.exit(1);
     });
 
-    // Handle unhandled promise rejections
-    process.on('unhandledRejection', (reason, promise) => {
+    // Handle unhandled promise rejections.
+    //
+    // P2-06 policy: log loudly but do NOT crash the process.
+    //
+    // Reasoning: an unhandledRejection does not imply corrupted global state
+    // the way an uncaughtException does. Crashing the entire process on a
+    // single stray rejection (e.g. a fire-and-forget notification that
+    // rejected) takes down every in-flight request and amplifies a localized
+    // bug into a full outage. We preserve observability by logging the full
+    // reason + stack at error level so monitoring/alerting still surfaces it
+    // and nothing fails silently — but we keep serving healthy traffic.
+    // Genuinely fatal conditions are still handled by uncaughtException above,
+    // which retains the fail-fast exit.
+    process.on('unhandledRejection', (reason) => {
       logger.error('Unhandled rejection', {
-        reason,
-        promise: String(promise),
+        reason: reason instanceof Error ? reason.message : String(reason),
+        stack: reason instanceof Error ? reason.stack : undefined,
       });
-      process.exit(1);
     });
   } catch (error) {
     logger.error('Failed to start server', {

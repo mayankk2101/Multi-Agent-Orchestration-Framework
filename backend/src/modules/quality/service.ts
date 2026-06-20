@@ -29,16 +29,31 @@ export class QualityService extends BaseService {
     const numScore = score;
     const derivedStatus = numScore >= 70 ? 'PASSED' : numScore >= 40 ? 'NEEDS_REWORK' : 'FAILED';
 
-    const verification = await this.prisma.qualityVerification.create({
-      data: {
-        assignment_id,
-        hotel_id: assignment.hotel_id,
-        verified_by_id: actor.userId,
-        score: numScore,
-        status: derivedStatus as any,
-        notes: notes ?? null,
-      },
-    });
+    let verification;
+    try {
+      verification = await this.prisma.qualityVerification.create({
+        data: {
+          assignment_id,
+          hotel_id: assignment.hotel_id,
+          verified_by_id: actor.userId,
+          score: numScore,
+          status: derivedStatus as any,
+          notes: notes ?? null,
+        },
+      });
+    } catch (err) {
+      // assignment_id is unique. Concurrent duplicate requests can pass the
+      // findUnique pre-check above and both reach create(), causing a P2002
+      // unique-constraint violation. Translate it to the same 409 the
+      // pre-check returns so concurrent duplicates never surface as a 500.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictError('Verification already exists for this assignment');
+      }
+      throw err;
+    }
 
     await this.logAudit(
       actor.userId,

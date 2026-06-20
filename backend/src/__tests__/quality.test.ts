@@ -36,6 +36,8 @@ jest.mock('../config/env.js', () => ({
 }));
 
 import { QualityController } from '../modules/quality/controller.js';
+import { QualityService } from '../modules/quality/service.js';
+import { Prisma } from '@prisma/client';
 
 function makeReq(
   body: Record<string, unknown> = {},
@@ -164,5 +166,64 @@ describe('Quality Zod validation — createRating (P2-03)', () => {
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
     expect(res.status).not.toHaveBeenCalled();
+  });
+});
+
+describe('Quality createVerification — concurrent duplicate handling (P2-04)', () => {
+  let service: QualityService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new QualityService();
+    mockWorkerAssignment.findUnique.mockResolvedValue({
+      id: 'a1',
+      hotel_id: 'h1',
+      worker_id: 'w1',
+    });
+  });
+
+  it('returns ConflictError when the pre-check finds an existing verification', async () => {
+    mockQualityVerification.findUnique.mockResolvedValue({ id: 'qv1' });
+
+    await expect(
+      service.createVerification(
+        { assignment_id: 'a1', score: 80 } as any,
+        { userId: 'u1', role: 'manager' }
+      )
+    ).rejects.toMatchObject({ name: 'ConflictError' });
+
+    expect(mockQualityVerification.create).not.toHaveBeenCalled();
+  });
+
+  it('maps a P2002 race on create() to ConflictError (409) instead of 500', async () => {
+    mockQualityVerification.findUnique.mockResolvedValue(null);
+
+    mockQualityVerification.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      })
+    );
+
+    await expect(
+      service.createVerification(
+        { assignment_id: 'a1', score: 80 } as any,
+        { userId: 'u1', role: 'manager' }
+      )
+    ).rejects.toMatchObject({ name: 'ConflictError' });
+  });
+
+  it('re-throws non-P2002 errors from create() unchanged', async () => {
+    mockQualityVerification.findUnique.mockResolvedValue(null);
+    mockQualityVerification.create.mockRejectedValue(new Error('db down'));
+
+    await expect(
+      service.createVerification(
+        { assignment_id: 'a1', score: 80 } as any,
+        { userId: 'u1', role: 'manager' }
+      )
+    ).rejects.toThrow('db down');
+  });
+});
   });
 });
