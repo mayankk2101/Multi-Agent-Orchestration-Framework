@@ -1,0 +1,168 @@
+import { API_BASE_URL } from "@/lib/config";
+import { useAuthStore } from "@/stores/auth";
+import type {
+  ApiEnvelope,
+  AuthUser,
+  LoginResponse,
+  RefreshResponse,
+} from "@/lib/types";
+
+/** Error thrown by {@link apiFetch} for any non-2xx response. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly details?: unknown;
+
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+interface ApiFetchOptions extends Omit<RequestInit, "body"> {
+  /** JSON-serialisable request body. */
+  body?: unknown;
+  /** Attach the bearer access token. Defaults to `true`. */
+  auth?: boolean;
+  /** Internal: prevents infinite refresh recursion. */
+  _retried?: boolean;
+}
+
+function buildUrl(path: string): string {
+  return path.startsWith("http")
+    ? path
+    : `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+async function parseEnvelope<T>(res: Response): Promise<ApiEnvelope<T>> {
+  const text = await res.text();
+  if (!text) {
+    return { status: "success", data: undefined as unknown as T };
+  }
+  try {
+    return JSON.parse(text) as ApiEnvelope<T>;
+  } catch {
+    throw new ApiError(res.status, "INVALID_RESPONSE", text || res.statusText);
+  }
+}
+
+/**
+ * Calls the backend refresh endpoint with the stored refresh token.
+ * On success the new tokens are written to the store; on failure the
+ * session is cleared. Returns the new access token, or `null`.
+ *
+ * A module-level promise de-duplicates concurrent refreshes so a burst
+ * of 401s only triggers a single refresh request.
+ */
+let refreshInFlight: Promise<string | null> | null = null;
+
+function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const { refreshToken, setTokens, clear } = useAuthStore.getState();
+    if (!refreshToken) {
+      clear();
+      return null;
+    }
+
+    try {
+      const res = await fetch(buildUrl("/auth/refresh"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      const envelope = await parseEnvelope<RefreshResponse>(res);
+      if (!res.ok || envelope.status === "error") {
+        clear();
+        return null;
+      }
+      setTokens(envelope.data);
+      return envelope.data.access_token;
+    } catch {
+      clear();
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
+}
+
+/**
+ * Typed fetch wrapper around the backend API.
+ *
+ * - Serialises `body` as JSON and sets the matching `Content-Type`.
+ * - Attaches the bearer access token unless `auth: false`.
+ * - On a 401, transparently refreshes the access token once and retries.
+ * - Unwraps the success envelope, returning `data`; throws {@link ApiError}
+ *   on any error response.
+ */
+export async function apiFetch<T>(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<T> {
+  const { body, auth = true, _retried = false, headers, ...rest } = options;
+
+  const finalHeaders = new Headers(headers);
+  if (body !== undefined && !finalHeaders.has("Content-Type")) {
+    finalHeaders.set("Content-Type", "application/json");
+  }
+  if (auth) {
+    const token = useAuthStore.getState().accessToken;
+    if (token) finalHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(buildUrl(path), {
+    ...rest,
+    headers: finalHeaders,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  // Attempt a single transparent refresh + retry on unauthorized.
+  if (res.status === 401 && auth && !_retried) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      return apiFetch<T>(path, { ...options, _retried: true });
+    }
+  }
+
+  const envelope = await parseEnvelope<T>(res);
+
+  if (!res.ok || envelope.status === "error") {
+    const err =
+      envelope.status === "error"
+        ? envelope.error
+        : { code: "HTTP_ERROR", message: res.statusText };
+    throw new ApiError(res.status, err.code, err.message, err.details);
+  }
+
+  return envelope.data;
+}
+
+/** High-level auth API matching the backend `/auth/*` routes. */
+export const authApi = {
+  login: (email: string, password: string) =>
+    apiFetch<LoginResponse>("/auth/login", {
+      method: "POST",
+      auth: false,
+      body: { email, password },
+    }),
+
+  me: () => apiFetch<AuthUser>("/auth/me"),
+
+  logout: (refreshToken: string | null) =>
+    apiFetch<{ message: string }>("/auth/logout", {
+      method: "POST",
+      body: refreshToken ? { refresh_token: refreshToken } : {},
+    }),
+};
