@@ -70,11 +70,11 @@ jobs:
           APNS_TEAM_ID: TESTTEAM123
           APNS_BUNDLE_ID: com.zirove.hotelcrm.test
           FIREBASE_PROJECT_ID: test-project
-          DO_SPACES_KEY: test
-          DO_SPACES_SECRET: test
-          DO_SPACES_BUCKET: test-bucket
-          DO_SPACES_REGION: fra1
-          DO_SPACES_ENDPOINT: https://fra1.digitaloceanspaces.com
+          AWS_REGION: eu-central-1
+          S3_BUCKET: test-bucket
+          S3_BUCKET_BACKUPS: test-backups
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
           REDIS_URL: ''
 
   mobile:

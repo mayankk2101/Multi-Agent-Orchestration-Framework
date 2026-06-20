@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# scripts/setup-droplet.sh
-# Run once as root on a fresh Ubuntu 24.04 Droplet.
-# Usage: bash setup-droplet.sh [production|staging]
+# scripts/setup-ec2.sh
+# Run once as root on a fresh Ubuntu 24.04 EC2 instance (or via user-data).
+# Prefer attaching the EC2 instance role for S3/Secrets Manager/ECR access
+# instead of static AWS keys. Usage: bash setup-ec2.sh [production|staging]
 set -euo pipefail
 
 ENV="${1:-production}"
@@ -18,7 +19,14 @@ apt-get install -y -qq \
   curl wget git unzip \
   nginx \
   docker.io docker-compose-plugin \
+  postgresql-client \
   ufw fail2ban
+
+# AWS CLI v2 (for S3 backups, ECR pulls, Secrets Manager)
+if ! command -v aws &>/dev/null; then
+  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+  unzip -q /tmp/awscliv2.zip -d /tmp && /tmp/aws/install
+fi
 
 echo "==> [3/9] Create deploy user"
 if ! id -u "$DEPLOY_USER" &>/dev/null; then
@@ -54,13 +62,14 @@ echo "==> [6/9] Enable Docker for deploy user"
 usermod -aG docker "$DEPLOY_USER"
 
 echo "==> [7/9] Configure Nginx"
-mkdir -p /etc/ssl/cloudflare
-chmod 700 /etc/ssl/cloudflare
+mkdir -p /etc/ssl/hotelcrm
+chmod 700 /etc/ssl/hotelcrm
 # Disable default Nginx site
 rm -f /etc/nginx/sites-enabled/default
 echo "     -> Copy nginx/hotelcrm.conf to /etc/nginx/sites-available/hotelcrm"
 echo "     -> Then: ln -s /etc/nginx/sites-available/hotelcrm /etc/nginx/sites-enabled/"
-echo "     -> And install Cloudflare origin cert to /etc/ssl/cloudflare/"
+echo "     -> Preferred: terminate TLS at an AWS ALB with an ACM certificate."
+echo "     -> No-ALB MVP: issue a cert with certbot --nginx (Let's Encrypt)."
 
 echo "==> [8/9] Configure UFW firewall"
 ufw --force reset
@@ -70,8 +79,9 @@ ufw allow ssh
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable
-echo "     -> After adding Cloudflare IPs, restrict 80/443 to Cloudflare ranges only"
-echo "     -> See: https://www.cloudflare.com/ips/"
+echo "     -> Primary access control is the EC2 security group (sg-ec2):"
+echo "        443/80 from the ALB SG (or 0.0.0.0/0 for the no-ALB MVP),"
+echo "        22 restricted to a break-glass IP — prefer SSM Session Manager."
 
 echo "==> [9/9] Create secret file template"
 if [ ! -f "$SECRET_DIR/.env" ]; then
@@ -80,7 +90,7 @@ if [ ! -f "$SECRET_DIR/.env" ]; then
 NODE_ENV=production
 PORT=3001
 
-DATABASE_URL=postgresql://user:password@db.hotelcrm.internal:25060/hotelcrm_prod?sslmode=require
+DATABASE_URL=postgresql://hotelcrm_app:password@db.xxxxxxxx.eu-central-1.rds.amazonaws.com:5432/hotelcrm?schema=public&sslmode=require
 REDIS_URL=redis://:REDIS_PASSWORD_HERE@127.0.0.1:6379
 REDIS_PASSWORD=CHANGE_ME
 
@@ -92,11 +102,12 @@ JWT_REFRESH_EXPIRY=7d
 CORS_ORIGIN=https://hotelcrm.app
 FRONTEND_URL=https://hotelcrm.app
 
-DO_SPACES_KEY=your-spaces-key
-DO_SPACES_SECRET=your-spaces-secret
-DO_SPACES_BUCKET=hotelcrm-uploads
-DO_SPACES_REGION=fra1
-DO_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
+# AWS S3 — prefer the EC2 instance role over static keys (leave keys unset).
+AWS_REGION=eu-central-1
+S3_BUCKET=hotelcrm-uploads
+S3_BUCKET_BACKUPS=hotelcrm-backups
+# AWS_ACCESS_KEY_ID=only-if-not-using-instance-role
+# AWS_SECRET_ACCESS_KEY=only-if-not-using-instance-role
 
 SENDGRID_API_KEY=SG.xxxxx
 EMAIL_SERVICE=sendgrid
@@ -120,13 +131,14 @@ fi
 
 echo ""
 echo "============================================================"
-echo "  Droplet setup complete."
+echo "  EC2 instance setup complete."
 echo "  Next steps:"
-echo "  1. Install Cloudflare origin cert to /etc/ssl/cloudflare/"
-echo "  2. Copy nginx/hotelcrm.conf → /etc/nginx/sites-available/hotelcrm"
-echo "  3. ln -s /etc/nginx/sites-available/hotelcrm /etc/nginx/sites-enabled/"
-echo "  4. nginx -t && systemctl enable --now nginx"
-echo "  5. Fill in /etc/hotel-crm/.env with real secrets"
-echo "  6. Clone repo: git clone <repo> $APP_DIR (as deploy user)"
-echo "  7. Run: bash scripts/deploy.sh production (as deploy user)"
+echo "  1. Attach the EC2 instance role (S3 + Secrets Manager + ECR + logs)."
+echo "  2. Provision TLS: ALB + ACM cert (preferred), or certbot --nginx (MVP)."
+echo "  3. Copy nginx/hotelcrm.conf → /etc/nginx/sites-available/hotelcrm"
+echo "  4. ln -s /etc/nginx/sites-available/hotelcrm /etc/nginx/sites-enabled/"
+echo "  5. nginx -t && systemctl enable --now nginx"
+echo "  6. Fill in /etc/hotel-crm/.env (or load from Secrets Manager)."
+echo "  7. Clone repo: git clone <repo> $APP_DIR (as deploy user)"
+echo "  8. Run: bash scripts/deploy.sh production (as deploy user)"
 echo "============================================================"
