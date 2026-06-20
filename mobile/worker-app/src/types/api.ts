@@ -80,8 +80,8 @@ export interface Attendance {
   id: string;
   assignment_id: string;
   worker_id: string;
-  check_in_time?: string;
-  check_out_time?: string;
+  check_in_at?: string | null;
+  check_out_at?: string | null;
   status: AttendanceStatus;
   notes?: string;
   created_at: string;

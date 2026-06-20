@@ -44,9 +44,9 @@ function ShiftCard({ item, onPress }: { item: WorkerAssignment; onPress: () => v
             </ThemedText>
           </>
         )}
-        {item.attendance?.check_in_time && (
+        {item.attendance?.check_in_at && (
           <ThemedText type="small" themeColor="textSecondary">
-            Checked in: {new Date(item.attendance.check_in_time).toLocaleTimeString()}
+            Checked in: {new Date(item.attendance.check_in_at).toLocaleTimeString()}
           </ThemedText>
         )}
       </ThemedView>

@@ -206,9 +206,14 @@ export const api = {
     checkOut: (attendanceId: string) =>
       request<Attendance>(`/attendance/${attendanceId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ check_out_time: new Date().toISOString() }),
+        body: JSON.stringify({ check_out_at: new Date().toISOString() }),
       }),
     get: (id: string) => request<Attendance>(`/attendance/${id}`),
+    // Resolve the attendance record for an assignment dynamically. The backend
+    // does not embed attendance on AssignmentDto, so the shift screen looks it
+    // up by assignment_id to obtain the id needed for check-out.
+    listByAssignment: (assignmentId: string) =>
+      request<Attendance[]>(`/attendance?assignment_id=${encodeURIComponent(assignmentId)}`),
   },
   notifications: {
     list: () => request<Notification[]>('/notifications'),

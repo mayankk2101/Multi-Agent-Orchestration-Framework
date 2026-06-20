@@ -6,7 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { api, ApiError } from '@/lib/api';
 import { Spacing } from '@/constants/theme';
-import type { WorkerAssignment } from '@/types/api';
+import type { WorkerAssignment, Attendance } from '@/types/api';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -21,18 +21,33 @@ export default function ShiftDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [shift, setShift] = useState<WorkerAssignment | null>(null);
+  const [att, setAtt] = useState<Attendance | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
 
+  // AssignmentDto does not embed attendance, so resolve it by assignment_id.
+  // This survives app restart / navigation / reload because it is fetched
+  // fresh from the backend each time the screen loads or an action completes.
+  const loadAttendance = async (assignmentId: string) => {
+    const records = await api.attendance.listByAssignment(assignmentId);
+    setAtt(records[0] ?? null);
+  };
+
   const reload = async () => {
     if (!id) return;
-    const res = await api.assignments.get(id);
-    setShift(res);
+    const [assignment] = await Promise.all([
+      api.assignments.get(id),
+      loadAttendance(id),
+    ]);
+    setShift(assignment);
   };
 
   useEffect(() => {
     if (!id) return;
-    api.assignments.get(id).then(setShift).finally(() => setLoading(false));
+    Promise.all([
+      api.assignments.get(id).then(setShift),
+      loadAttendance(id),
+    ]).finally(() => setLoading(false));
   }, [id]);
 
   const handleCheckIn = async () => {
@@ -50,10 +65,10 @@ export default function ShiftDetailScreen() {
   };
 
   const handleCheckOut = async () => {
-    if (!shift?.attendance?.id) return;
+    if (!att?.id) return;
     setActing(true);
     try {
-      await api.attendance.checkOut(shift.attendance.id);
+      await api.attendance.checkOut(att.id);
       await reload();
       Alert.alert('Checked Out', 'You have successfully checked out.');
     } catch (err) {
@@ -80,9 +95,8 @@ export default function ShiftDetailScreen() {
   }
 
   const wr = shift.work_request;
-  const att = shift.attendance;
-  const canCheckIn = ['CONFIRMED', 'IN_PROGRESS'].includes(shift.status) && !att?.check_in_time;
-  const canCheckOut = !!(att?.check_in_time && !att?.check_out_time);
+  const canCheckIn = ['CONFIRMED', 'IN_PROGRESS'].includes(shift.status) && !att?.check_in_at;
+  const canCheckOut = !!(att?.check_in_at && !att?.check_out_at);
 
   return (
     <ThemedView style={styles.container}>
@@ -118,12 +132,12 @@ export default function ShiftDetailScreen() {
           <ThemedView type="backgroundElement" style={styles.section}>
             <InfoRow
               label="Check-in"
-              value={att?.check_in_time ? new Date(att.check_in_time).toLocaleTimeString() : '—'}
+              value={att?.check_in_at ? new Date(att.check_in_at).toLocaleTimeString() : '—'}
             />
             <View style={styles.divider} />
             <InfoRow
               label="Check-out"
-              value={att?.check_out_time ? new Date(att.check_out_time).toLocaleTimeString() : '—'}
+              value={att?.check_out_at ? new Date(att.check_out_at).toLocaleTimeString() : '—'}
             />
             {att?.status ? (
               <>
