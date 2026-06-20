@@ -18,10 +18,16 @@ const mockQualityVerification = {
 const mockWorkerAssignment = {
   findUnique: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
 };
+const mockRating = {
+  create: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
+  aggregate: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
+};
 const mockPrisma = {
   qualityVerification: mockQualityVerification,
   workerAssignment: mockWorkerAssignment,
+  rating: mockRating,
   auditLog: { create: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
+  $transaction: jest.fn(async (cb: any) => cb(mockPrisma)) as jest.MockedFunction<(...args: any[]) => any>,
 };
 
 jest.mock('../lib/db.js', () => ({ getPrisma: () => mockPrisma }));
@@ -37,6 +43,7 @@ jest.mock('../config/env.js', () => ({
 
 import { QualityController } from '../modules/quality/controller.js';
 import { QualityService } from '../modules/quality/service.js';
+import { CreateRatingSchema } from '../modules/quality/types.js';
 import { Prisma } from '@prisma/client';
 
 function makeReq(
@@ -225,5 +232,88 @@ describe('Quality createVerification — concurrent duplicate handling (P2-04)',
     ).rejects.toThrow('db down');
   });
 });
+
+describe('Quality Zod validation — createRating (P2-03)', () => {
+  let controller: QualityController;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controller = new QualityController();
+  });
+
+  it('rejects missing worker_id with ValidationError', async () => {
+    const req = makeReq({ assignment_id: 'a1', score: 4 });
+    const res = makeRes();
+    const next = jest.fn() as jest.MockedFunction<(...args: any[]) => any> as unknown as NextFunction;
+
+    await controller.createRating(req, res as unknown as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('rejects score out of range (>5) with ValidationError', async () => {
+    const req = makeReq({ assignment_id: 'a1', worker_id: 'w1', score: 6 });
+    const res = makeRes();
+    const next = jest.fn() as jest.MockedFunction<(...args: any[]) => any> as unknown as NextFunction;
+
+    await controller.createRating(req, res as unknown as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer score with ValidationError', async () => {
+    const req = makeReq({ assignment_id: 'a1', worker_id: 'w1', score: 3.5 });
+    const res = makeRes();
+    const next = jest.fn() as jest.MockedFunction<(...args: any[]) => any> as unknown as NextFunction;
+
+    await controller.createRating(req, res as unknown as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('rejects score below range (boundary score = 0) at the schema level', () => {
+    const result = CreateRatingSchema.safeParse({
+      assignment_id: 'a1',
+      worker_id: 'w1',
+      score: 0,
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('Quality createRating — duplicate rating handling (P1-02)', () => {
+  let service: QualityService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new QualityService();
+    mockWorkerAssignment.findUnique.mockResolvedValue({
+      id: 'a1',
+      hotel_id: 'h1',
+      worker_id: 'w1',
+    });
+  });
+
+  it('maps a Prisma P2002 from rating.create() to a ConflictError', async () => {
+    mockRating.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: 'test',
+      })
+    );
+
+    await expect(
+      service.createRating(
+        { assignment_id: 'a1', worker_id: 'w1', score: 4 } as any,
+        { userId: 'u1', role: 'manager' }
+      )
+    ).rejects.toMatchObject({
+      name: 'ConflictError',
+      message: 'Rating already exists for this assignment',
+    });
   });
 });

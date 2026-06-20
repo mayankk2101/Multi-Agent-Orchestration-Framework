@@ -77,10 +77,11 @@ async function main() {
     // and nothing fails silently — but we keep serving healthy traffic.
     // Genuinely fatal conditions are still handled by uncaughtException above,
     // which retains the fail-fast exit.
-    process.on('unhandledRejection', (reason) => {
+    process.on('unhandledRejection', (reason, promise) => {
       logger.error('Unhandled rejection', {
         reason: reason instanceof Error ? reason.message : String(reason),
         stack: reason instanceof Error ? reason.stack : undefined,
+        promise: String(promise),
       });
     });
   } catch (error) {
