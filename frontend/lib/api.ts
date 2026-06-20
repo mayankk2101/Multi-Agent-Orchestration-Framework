@@ -3,8 +3,13 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   ApiEnvelope,
   AuthUser,
+  CreateWorkRequestInput,
+  HotelSummary,
+  ListWorkRequestsQuery,
   LoginResponse,
   RefreshResponse,
+  UpdateWorkRequestInput,
+  WorkRequest,
 } from "@/lib/types";
 
 /** Error thrown by {@link apiFetch} for any non-2xx response. */
@@ -165,4 +170,46 @@ export const authApi = {
       method: "POST",
       body: refreshToken ? { refresh_token: refreshToken } : {},
     }),
+};
+
+/**
+ * Serialises a query object into a URL search string, skipping
+ * `undefined`/empty values. Returns `""` (no `?`) when nothing is set.
+ */
+function toQuery(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** Work requests API matching the backend `/work-requests/*` routes. */
+export const workRequestsApi = {
+  list: (query: ListWorkRequestsQuery = {}) =>
+    apiFetch<WorkRequest[]>(`/work-requests${toQuery({ ...query })}`),
+
+  get: (id: string) => apiFetch<WorkRequest>(`/work-requests/${id}`),
+
+  create: (input: CreateWorkRequestInput) =>
+    apiFetch<WorkRequest>("/work-requests", { method: "POST", body: input }),
+
+  update: (id: string, input: UpdateWorkRequestInput) =>
+    apiFetch<WorkRequest>(`/work-requests/${id}`, {
+      method: "PATCH",
+      body: input,
+    }),
+
+  /** Publish a DRAFT request by transitioning it to OPEN. */
+  publish: (id: string) =>
+    apiFetch<WorkRequest>(`/work-requests/${id}`, {
+      method: "PATCH",
+      body: { status: "OPEN" },
+    }),
+};
+
+/** Hotels API — only the read used by the work-request create form. */
+export const hotelsApi = {
+  list: () => apiFetch<HotelSummary[]>("/crm/hotels?per_page=100"),
 };

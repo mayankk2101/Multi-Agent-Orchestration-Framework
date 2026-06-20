@@ -15,11 +15,11 @@ interface NavItem {
   roles?: Role[];
 }
 
-// Placeholder navigation. Feature routes (work requests, applications,
-// assignments, attendance, notifications) are intentionally out of scope
-// for Phase 1/2 and will be added under app/(protected)/ later.
+// Feature routes are added here as modules land under app/(protected)/.
+// Applications, assignments, attendance and notifications remain out of scope.
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/requests", label: "Work requests" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
