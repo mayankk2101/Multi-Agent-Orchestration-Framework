@@ -90,9 +90,8 @@ if [ ! -f "$SECRET_DIR/.env" ]; then
 NODE_ENV=production
 PORT=3001
 
-DATABASE_URL=postgresql://hotelcrm_app:password@db.xxxxxxxx.eu-central-1.rds.amazonaws.com:5432/hotelcrm?schema=public&sslmode=require
-REDIS_URL=redis://:REDIS_PASSWORD_HERE@127.0.0.1:6379
-REDIS_PASSWORD=CHANGE_ME
+DATABASE_URL=postgresql://hotelcrm_app:CHANGE_ME_PASSWORD@db.xxxxxxxx.eu-central-1.rds.amazonaws.com:5432/hotelcrm?schema=public&sslmode=require
+REDIS_URL=redis://:CHANGE_ME_REDIS_PASSWORD@127.0.0.1:6379
 
 JWT_SECRET=GENERATE_WITH__openssl_rand_-base64_48
 JWT_REFRESH_SECRET=GENERATE_WITH__openssl_rand_-base64_48
