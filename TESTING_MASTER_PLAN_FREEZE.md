@@ -1,4 +1,6 @@
 # TESTING MASTER PLAN — FREEZE
+
+> **⚠️ NOTE (2026-06-19).** Any references to mocking "DigitalOcean Spaces" predate the migration to **AWS S3**. Mock the S3 client instead. All other testing guidance remains valid.
 ## Hotel CRM · Marketplace Architecture · Canonical Testing Record
 
 **Status**: APPROVED — FROZEN  

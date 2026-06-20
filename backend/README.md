@@ -131,11 +131,13 @@ npm test
 
 ## Database Setup
 
-### Using DigitalOcean (Production)
+### Using AWS RDS (Production)
 
-1. Create managed PostgreSQL instance in DigitalOcean
-2. Set `DATABASE_URL` to the connection string
-3. Run `npm run db:push`
+1. Create an RDS PostgreSQL instance in AWS (region `eu-central-1`)
+2. Set `DATABASE_URL` to the connection string (append `?sslmode=require`)
+3. Run `npm run db:migrate` (production uses `prisma migrate deploy`)
+
+See [../AWS_DEPLOYMENT_GUIDE.md](../AWS_DEPLOYMENT_GUIDE.md) for full setup.
 
 ### Using Docker (Development)
 

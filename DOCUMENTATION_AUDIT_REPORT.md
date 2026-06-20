@@ -1,5 +1,7 @@
 # Hotel CRM - Documentation Consistency Audit Report
 
+> **⚠️ NOTE (2026-06-19).** This earlier audit references the deployment architecture as "Cloudflare → Nginx → Express → PostgreSQL". The platform has since migrated to **AWS** (ALB + ACM → EC2 → RDS PostgreSQL). For the authoritative AWS documentation set see `AWS_DOCUMENTATION_AUDIT.md`, `AWS_DEPLOYMENT_GUIDE.md`, and `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`.
+
 **Date**: 2026-06-01  
 **Auditor**: Claude Code  
 **Status**: ✅ COMPLETE REVIEW

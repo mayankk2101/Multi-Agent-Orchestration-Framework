@@ -1,4 +1,6 @@
 # TESTING MASTER PLAN — PATCH V2
+
+> **⚠️ NOTE (2026-06-19).** Any references to mocking "DigitalOcean Spaces" predate the migration to **AWS S3**. Mock the S3 client instead. All other testing guidance remains valid.
 ## Implementation-Valid Testing Plan
 
 **Status**: APPROVED  

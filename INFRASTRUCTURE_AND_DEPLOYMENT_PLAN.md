@@ -1,9 +1,11 @@
 # Infrastructure & Deployment Plan — Hotel CRM
 
-**Stack:** Node.js · Express · Prisma · PostgreSQL · DigitalOcean · Expo  
-**Architecture:** Modular Monolith (MVP) → path to microservices  
-**Date:** 2026-06-09  
-**Region primary:** Frankfurt (`fra1`) — GDPR-compliant EU hosting
+**Stack:** Node.js · Express · Prisma · PostgreSQL · AWS · Expo
+**Architecture:** Modular Monolith (MVP) → path to microservices
+**Date:** 2026-06-09 · **Reconciled to AWS:** 2026-06-19
+**Region primary:** Frankfurt (`eu-central-1`) — GDPR-compliant EU hosting
+
+> **Platform note:** This plan was migrated from DigitalOcean to **AWS** as the single deployment platform. AWS service mapping: Compute = **EC2**, Database = **RDS PostgreSQL**, Storage = **S3**, Registry = **ECR**, Monitoring = **CloudWatch**, SSL = **ACM**, DNS = **Route53** (optional), Secrets = **AWS Secrets Manager** (env vars acceptable for MVP). See `AWS_DEPLOYMENT_GUIDE.md` for the step-by-step procedure.
 
 ---
 
@@ -19,9 +21,9 @@
 
 ### Environment Separation Rules
 
-- Each environment has its own DigitalOcean PostgreSQL cluster (never share DB between envs)
+- Each environment has its own AWS RDS PostgreSQL instance (never share DB between envs)
 - Staging mirrors production topology at 50% capacity
-- Production environment variables are **never** stored in source control
+- Production secrets live in AWS Secrets Manager (or EC2 instance env file for MVP) — **never** in source control
 - Mobile apps (Expo) use build-time `APP_ENV` flag to switch API base URLs
 
 ### `.env` File Conventions
@@ -50,23 +52,27 @@ EAS Build profiles (`eas.json`) map `APP_ENV` per build profile.
 
 ## 2. Secrets Management
 
-### Tool: DigitalOcean App Platform Environment Variables (encrypted at rest)
+### Tool: AWS Secrets Manager (preferred) — env vars on EC2 acceptable for MVP
 
-All production secrets are stored as **encrypted env vars** in DO App Platform — never in `.env` files on the server, never in Git.
+All production secrets are stored in **AWS Secrets Manager** and injected at boot — never committed to Git. For the MVP, an alternative is an `/etc/hotel-crm/.env` file on the EC2 instance (chmod 600, owned by the deploy user) populated from Secrets Manager.
 
 ### Secret Categories & Storage
 
 | Secret | Storage Location | Rotation Cadence |
 |---|---|---|
-| `DATABASE_URL` | DO App Platform (encrypted) | On breach / quarterly |
-| `JWT_SECRET` (≥32 chars) | DO App Platform | Quarterly |
-| `JWT_REFRESH_SECRET` | DO App Platform | Quarterly |
-| `DO_SPACES_KEY` / `SECRET` | DO App Platform | Quarterly |
-| `SENDGRID_API_KEY` | DO App Platform | Annually |
-| `APNS_KEY_ID` / `TEAM_ID` | DO App Platform + `.p8` file in DO Spaces (private bucket) | On cert expiry |
-| `FIREBASE_CREDENTIALS` | DO App Platform (base64 JSON) | Annually |
-| `SENTRY_DSN` | DO App Platform | Non-sensitive; change if project moves |
-| DB passwords | DigitalOcean managed DB (rotated via DO control panel) | Quarterly |
+| `DATABASE_URL` | AWS Secrets Manager | On breach / quarterly |
+| `JWT_SECRET` (≥32 chars) | AWS Secrets Manager | Quarterly |
+| `JWT_REFRESH_SECRET` | AWS Secrets Manager | Quarterly |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (or IAM role) | IAM role on EC2 (preferred) / Secrets Manager | Prefer instance role — no static keys |
+| `S3_BUCKET` | App config / Secrets Manager | Non-sensitive |
+| `SENDGRID_API_KEY` | AWS Secrets Manager | Annually |
+| `APNS_KEY_ID` / `TEAM_ID` | AWS Secrets Manager | On cert expiry |
+| `APNS_PRIVATE_KEY_BASE64` | AWS Secrets Manager (base64) | On key expiry |
+| `FIREBASE_CREDENTIALS` | AWS Secrets Manager (base64 JSON) | Annually |
+| `SENTRY_DSN` | App config | Non-sensitive |
+| DB master password | AWS RDS (rotated via Secrets Manager rotation) | Quarterly |
+
+> **Best practice:** EC2 accesses S3 via an **IAM instance role** — no long-lived `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` on the box. Static keys are only for local dev or CI.
 
 ### Secret Injection Pattern
 
@@ -89,46 +95,45 @@ Server **refuses to start** if any required secret is absent — fail-fast is sa
 
 ### Rotation Procedure
 
-1. Generate new secret value
-2. Update DO App Platform encrypted env var (zero-downtime rolling deploy triggers automatically)
+1. Generate new secret value (or trigger Secrets Manager rotation)
+2. Update the secret in AWS Secrets Manager; redeploy / restart the EC2 service to pick it up
 3. Invalidate all active `Session` rows for JWT secrets (forced re-login)
 4. Archive old value in team password manager (1Password/Bitwarden) with rotation date
 
 ### GDPR / Compliance Notes
 
-- Payroll `encrypted_data` field uses **AES-256** with keys referenced via `encryption_key_id` — actual keys stored in DO App Platform, never in DB
-- Document URLs in DO Spaces use **pre-signed URLs** (15-min expiry) — no direct public access
+- Payroll `encrypted_data` field uses **AES-256** with keys referenced via `encryption_key_id` — actual keys stored in AWS Secrets Manager (or AWS KMS), never in DB
+- Document URLs in S3 use **pre-signed URLs** (15-min expiry) — no direct public access; bucket has "Block all public access" enabled
 - Audit logs (`AuditLog` table) capture all access to sensitive resources
 
 ---
 
 ## 3. Backup Strategy
 
-### PostgreSQL Backups (DigitalOcean Managed DB)
+### PostgreSQL Backups (AWS RDS)
 
 | Tier | Frequency | Retention | RPO | RTO |
 |---|---|---|---|---|
 | Automated daily snapshots | Daily 02:00 UTC | 7 days (dev), 30 days (prod) | 24h | 30 min |
-| Point-in-time recovery (PITR) | Continuous WAL streaming | 7 days (prod) | 5 min | 1 hour |
+| Point-in-time recovery (PITR) | Continuous (transaction logs) | 7 days (prod) | 5 min | 1 hour |
 | Weekly manual export | Sunday 03:00 UTC | 90 days | — | — |
 
-DigitalOcean Managed PostgreSQL includes automated backups and PITR out of the box on Business tier.
+AWS RDS includes automated backups and PITR out of the box; enable automated backups with a 30-day retention window on the production instance.
 
 ### Weekly Export Automation
 
 ```bash
-# Runs as DO Scheduled Function or cron on a droplet
+# Runs as a cron on EC2 (or an EventBridge-scheduled Lambda)
 pg_dump $DATABASE_URL --format=custom --compress=9 \
   | aws s3 cp - s3://hotelcrm-backups/weekly/$(date +%Y%m%d).dump \
-    --endpoint-url https://fra1.digitaloceanspaces.com \
     --storage-class STANDARD_IA
 ```
 
-### DO Spaces (File Storage) Backups
+### S3 (File Storage) Backups
 
-- Lifecycle policy: transition files to `ARCHIVE` tier after 180 days
-- Cross-region replication: `fra1` → `ams3` for production bucket
-- Versioning enabled on `hotelcrm-uploads` bucket — 30-day version retention
+- Lifecycle policy: transition objects to `GLACIER` after 180 days
+- Cross-region replication: `eu-central-1` → `eu-west-1` for production bucket
+- Versioning enabled on `hotelcrm-uploads` bucket — 30-day noncurrent version retention
 
 ### Application State Backup
 
@@ -136,24 +141,26 @@ Redis (if used for caching) is ephemeral — no backup needed; data reconstructe
 
 ### Backup Validation
 
-- Monthly restore drill: restore latest backup to a throwaway DO Managed DB instance, run `prisma db pull` to validate schema integrity
+- Monthly restore drill: restore latest snapshot to a throwaway RDS instance, run `prisma db pull` to validate schema integrity
 - Automated restore test via GitHub Actions on the first Monday of each month
 
 ---
 
 ## 4. Monitoring
 
-### Stack: DigitalOcean Monitoring + Sentry + UptimeRobot
+### Stack: AWS CloudWatch + Sentry + UptimeRobot
 
-#### Infrastructure Metrics (DO Monitoring — included free)
+#### Infrastructure Metrics (CloudWatch — EC2 + RDS)
 
 | Metric | Alert Threshold | Channel |
 |---|---|---|
-| CPU utilization | > 80% for 5 min | Slack #alerts |
-| Memory usage | > 85% | Slack #alerts |
-| Disk I/O | > 90% | PagerDuty (prod only) |
-| DB connection pool | > 80% of max_connections | Slack #alerts |
-| DB disk usage | > 75% | Slack #alerts + email |
+| EC2 CPU utilization | > 80% for 5 min | Slack #alerts |
+| EC2 memory usage (CW agent) | > 85% | Slack #alerts |
+| EC2 disk usage (CW agent) | > 90% | PagerDuty (prod only) |
+| RDS DatabaseConnections | > 80% of max_connections | Slack #alerts |
+| RDS FreeStorageSpace | < 25% | Slack #alerts + email |
+
+Alarms are defined in CloudWatch and route to SNS → Slack/PagerDuty.
 
 #### Application Metrics (Sentry Performance)
 
@@ -188,7 +195,7 @@ Key Sentry dashboards:
 
 #### Business Metrics (Custom — log-derived)
 
-Track via structured log queries (see Logging section):
+Track via CloudWatch Logs Insights queries:
 - Tasks created/completed per day per hotel
 - Worker assignments filled rate
 - Quality verification turnaround time
@@ -198,7 +205,7 @@ Track via structured log queries (see Logging section):
 
 ## 5. Logging
 
-### Stack: Winston + DigitalOcean Managed Logging (or Logtail)
+### Stack: Winston + AWS CloudWatch Logs
 
 ### Log Levels
 
@@ -229,7 +236,7 @@ export const logger = winston.createLogger({
   },
   transports: [
     new winston.transports.Console(),
-    // Production: pipe stdout to DO Managed Logging or Logtail agent
+    // Production: the CloudWatch agent ships stdout to a CloudWatch Logs group
   ],
 });
 ```
@@ -242,20 +249,20 @@ Every request logs: `method`, `path`, `status`, `duration_ms`, `user_id` (if aut
 
 - **Never log** raw PII: passwords, full names, passport numbers, salary figures, document contents
 - IP addresses stored as SHA-256 hash in logs
-- Log retention: 30 days in hot storage, 90 days in cold archive, then purged
+- Log retention: 30 days searchable in CloudWatch, then exported to S3/Glacier for 1 year, then purged
 - AuditLog table (PostgreSQL) is the authoritative trail for compliance — logs are operational only
 
 ### Log Aggregation (Production)
 
 ```
 App Container stdout (JSON)
-    → DO App Platform log drain
-    → Logtail (Better Stack) [~$25/month for 5GB/day]
-    → Retention: 30 days searchable, 1 year archive
+    → CloudWatch agent on EC2
+    → CloudWatch Logs group /hotel-crm/api
+    → Retention: 30 days searchable, exported to S3 (1 year archive)
 ```
 
-Logtail alerts trigger on:
-- `level: "error"` → immediate Slack notification
+CloudWatch metric filters / alarms trigger on:
+- `level: "error"` → SNS → immediate Slack notification
 - `message: "prisma query slow"` with `duration_ms > 1000` → weekly digest
 - `status: 401` spike > 50/min → Slack alert (possible credential stuffing)
 
@@ -349,11 +356,26 @@ jobs:
     needs: ci  # reuse CI workflow via workflow_call
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy to DO App Platform (staging)
-        uses: digitalocean/app_action@v1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          app_name: hotel-crm-staging
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Build, tag, push image to ECR
+        run: |
+          aws ecr get-login-password --region eu-central-1 \
+            | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+          docker build -t ${{ secrets.ECR_REGISTRY }}/hotel-crm/backend:$GITHUB_SHA backend
+          docker push ${{ secrets.ECR_REGISTRY }}/hotel-crm/backend:$GITHUB_SHA
+
+      - name: Deploy to staging EC2
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=hotel-crm-staging" \
+            --parameters 'commands=["/opt/hotel-crm/scripts/deploy.sh staging '"$GITHUB_SHA"'"]'
 ```
 
 ```yaml
@@ -377,21 +399,30 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
 
-      - name: Deploy to DO App Platform (production)
-        uses: digitalocean/app_action@v1
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          app_name: hotel-crm-production
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - name: Deploy to production EC2
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=hotel-crm-production" \
+            --parameters 'commands=["/opt/hotel-crm/scripts/deploy.sh production '"$GITHUB_REF_NAME"'"]'
 ```
 
 ### Deployment Process (Zero-Downtime)
 
-DO App Platform performs rolling deploys by default:
-1. Build new container image
+On EC2, deploys pull the new image and restart behind the reverse proxy / load balancer:
+1. Build and push container image to ECR
 2. Run `prisma migrate deploy` (migration must be backward-compatible)
-3. Start new instance, pass health check (`GET /api/v1/health`)
-4. Route traffic to new instance
-5. Terminate old instance
+3. Pull new image on EC2, start the new container, pass health check (`GET /api/v1/health`)
+4. Switch traffic (ALB target / Nginx upstream) to the new container
+5. Stop the old container
+
+> For a single-instance MVP without an ALB, use `pm2 reload` / a rolling container swap to minimize downtime.
 
 **Additive-only migration rule:** Never rename/drop columns in a single deploy. Use expand-contract pattern (add column → deploy → backfill → remove old column → deploy).
 
@@ -410,37 +441,44 @@ eas submit --platform all
 
 ## 7. Production Topology
 
-### DigitalOcean Architecture
+### AWS Architecture
 
 ```
                           ┌─────────────────────────────────────────┐
-                          │         DigitalOcean  fra1               │
-                          │                                          │
+                          │            AWS  eu-central-1             │
+                          │                  (VPC)                   │
   Mobile (Expo) ──────┐   │   ┌─────────────┐    ┌──────────────┐  │
-  Web Frontend ───────┼───┼──▶│  DO Load    │───▶│  App Platform │  │
-  Admin Dashboard ────┘   │   │  Balancer   │    │  (2 instances)│  │
-                          │   │  (HTTPS/443)│    │  Node/Express │  │
-                          │   └─────────────┘    │  Port 3001    │  │
-                          │                      └──────┬───────┘  │
-                          │                             │           │
+  Web Frontend ───────┼───┼──▶│ Application │───▶│   EC2         │  │
+  Admin Dashboard ────┘   │   │ Load        │    │ (Node/Express)│  │
+                          │   │ Balancer    │    │  Port 3001    │  │
+                          │   │ (HTTPS/443, │    │  Docker       │  │
+                          │   │  ACM cert)  │    └──────┬───────┘  │
+                          │   └─────────────┘           │           │
                           │   ┌─────────────────────────▼────────┐  │
-                          │   │    DO Managed PostgreSQL          │  │
-                          │   │    Primary (4GB RAM, 2 vCPU)     │  │
-                          │   │    Standby replica (hot)          │  │
-                          │   │    Connection pooler (PgBouncer)  │  │
+                          │   │    AWS RDS PostgreSQL             │  │
+                          │   │    Primary (db.t3.medium)         │  │
+                          │   │    Multi-AZ standby (prod)        │  │
                           │   └──────────────────────────────────┘  │
                           │                                          │
                           │   ┌──────────────────────────────────┐  │
-                          │   │    DO Spaces (fra1)               │  │
+                          │   │    AWS S3 (eu-central-1)          │  │
                           │   │    hotelcrm-uploads (private)     │  │
                           │   │    hotelcrm-backups               │  │
                           │   └──────────────────────────────────┘  │
                           │                                          │
                           │   ┌──────────────┐                       │
-                          │   │  DO Redis    │  (optional, caching)  │
-                          │   │  1GB managed │                       │
+                          │   │ Redis (Docker │  (optional, caching) │
+                          │   │ on EC2 /      │                       │
+                          │   │ ElastiCache)  │                       │
                           │   └──────────────┘                       │
                           └─────────────────────────────────────────┘
+
+  Edge / DNS / SSL:
+  ├── Route53 (DNS — optional if domain stays external)
+  ├── ACM (TLS certificate on the ALB)
+  └── AWS WAF (attached to ALB; CloudFront optional for CDN)
+
+  Container images: AWS ECR (hotel-crm/backend)
 
   External Services:
   ├── SendGrid (transactional email)
@@ -449,97 +487,82 @@ eas submit --platform all
   └── Expo EAS (mobile CI/CD + OTA updates)
 ```
 
-### App Platform Specification
+### Compute Specification (EC2)
 
-```yaml
-# .do/app.yaml
-name: hotel-crm-production
-region: fra
+```
+Production:
+  EC2 instance         — t3.medium (2 vCPU, 4GB RAM), Ubuntu 24.04 LTS, eu-central-1
+  Runs:                  Docker (backend container from ECR), Nginx reverse proxy,
+                         Docker Redis (optional), CloudWatch agent
+  IAM instance role:     S3 read/write (hotelcrm-uploads), Secrets Manager read,
+                         CloudWatch Logs write, ECR pull
+  Storage:               30GB gp3 EBS root volume
 
-services:
-  - name: api
-    source_dir: /backend
-    github:
-      branch: main
-      deploy_on_push: false  # controlled by CI/CD workflow
-    build_command: npm ci && npm run build
-    run_command: node dist/server.js
-    environment_slug: node-js
-    instance_count: 2          # HA — 2 instances minimum
-    instance_size_slug: professional-xs  # 1 vCPU, 1GB RAM (~$12/mo each)
-    health_check:
-      http_path: /api/v1/health
-      initial_delay_seconds: 20
-      period_seconds: 10
-      failure_threshold: 3
-    envs:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        value: ${db.DATABASE_URL}
-        type: SECRET
-      - key: JWT_SECRET
-        type: SECRET
-      # ... all secrets injected here
+Database:
+  RDS PostgreSQL 15      — db.t3.medium, 50GB gp3, Multi-AZ (prod), automated backups 30d
 
-databases:
-  - name: db
-    engine: PG
-    version: "15"
-    size: db-s-2vcpu-4gb   # $50/mo — 4GB RAM, 38GB SSD, standby included
-    num_nodes: 2            # primary + standby
+Object storage:
+  S3 bucket              — hotelcrm-uploads (private, versioned, SSE-S3 encryption)
+  S3 bucket              — hotelcrm-backups (STANDARD_IA + lifecycle to Glacier)
 ```
 
 ### Scaling Triggers
 
-- **Horizontal:** Scale App Platform instances from 2 → 4 when CPU > 70% sustained 10 min
-- **Vertical:** Upgrade DB tier when DB CPU > 60% average over 1 day or connection pool > 80%
-- **Read replica:** Add when reporting queries begin affecting write latency (> 200ms average)
+- **Horizontal:** Place EC2 instances in an Auto Scaling Group behind the ALB; scale 1 → N when CPU > 70% sustained 10 min
+- **Vertical:** Upgrade RDS instance class when DB CPU > 60% average over 1 day or connection pool > 80%
+- **Read replica:** Add an RDS read replica when reporting queries begin affecting write latency (> 200ms average)
+- **Cache:** Migrate Docker Redis → AWS ElastiCache when cache load justifies a managed tier
 
 ### Network Security
 
-- All traffic HTTPS/TLS 1.3 (DO Load Balancer terminates TLS)
-- DO Managed DB: SSL required (`?sslmode=require` in DATABASE_URL), VPC-internal connection
-- DO Spaces: private bucket + pre-signed URLs (15-min TTL) — no public read
-- App instances: private VPC, only LB exposes public IP
-- Rate limiting: 100 req/min per IP on auth routes, 1000 req/min on API routes
+- All public traffic HTTPS/TLS 1.3 (ALB terminates TLS using an ACM certificate)
+- RDS: SSL required (`?sslmode=require` in DATABASE_URL); reachable only from the EC2 security group, private subnet
+- S3: "Block all public access" ON; pre-signed URLs (15-min TTL) for file access
+- EC2: private subnet where possible; only the ALB security group is internet-facing
+- Security groups: ALB SG allows 443 from internet; EC2 SG allows 3001 only from ALB SG; RDS SG allows 5432 only from EC2 SG
+- Rate limiting: 100 req/min per IP on auth routes, 1000 req/min on API routes (app-level + AWS WAF rule)
 
 ---
 
 ## 8. Cost Estimates
 
-### Monthly Production Costs (fra1, EUR approximate)
+### Monthly Production Costs (eu-central-1, USD approximate)
 
 | Resource | Spec | Monthly Cost |
 |---|---|---|
-| App Platform — 2 × Professional XS | 1 vCPU, 1GB RAM each | ~$24 |
-| DO Managed PostgreSQL | 2-node cluster, 4GB RAM, 38GB SSD | ~$50 |
-| DO Spaces | 250GB storage + 1TB egress | ~$8 |
-| DO Load Balancer | Included in App Platform | $0 |
-| DO Managed Redis | 1GB (optional, caching) | ~$15 |
-| Sentry | Team plan (1 seat free, 5 devs ~$26/mo) | ~$26 |
+| EC2 — t3.medium | 2 vCPU, 4GB RAM (on-demand) | ~$30 |
+| RDS PostgreSQL — db.t3.medium Multi-AZ | 2 vCPU, 4GB RAM, 50GB gp3 | ~$110 |
+| S3 | 250GB storage + 1TB egress | ~$30 |
+| Application Load Balancer | 1 ALB | ~$20 |
+| ACM | TLS certificate | $0 (free) |
+| Route53 | 1 hosted zone + queries | ~$1 |
+| ECR | image storage | ~$1 |
+| CloudWatch | metrics, logs, alarms | ~$10 |
+| Sentry | Team plan | ~$26 |
 | SendGrid | Essentials 40K emails/mo | ~$15 |
 | UptimeRobot | Free tier (50 monitors) | $0 |
 | Expo EAS | Production plan | ~$29 |
-| **Total MVP** | | **~$167/mo** |
+| **Total MVP** | | **~$300/mo** |
+
+> A leaner single-instance MVP (no ALB, no Multi-AZ, RDS db.t3.small) brings this down to roughly **$130–160/mo**. Use the lean tier to launch, then enable Multi-AZ and the ALB as traffic grows.
 
 ### Staging Environment
 
 | Resource | Spec | Monthly Cost |
 |---|---|---|
-| App Platform — 1 × Basic XS | Shared, 512MB RAM | ~$5 |
-| DO Managed PostgreSQL | 1-node, 1GB RAM | ~$15 |
-| DO Spaces | Shared dev bucket | ~$2 |
-| **Total Staging** | | **~$22/mo** |
+| EC2 — t3.small | 2 vCPU, 2GB RAM | ~$15 |
+| RDS PostgreSQL — db.t3.micro | Single-AZ, 20GB | ~$15 |
+| S3 | Shared dev bucket | ~$2 |
+| **Total Staging** | | **~$32/mo** |
 
 ### Cost Scaling Milestones
 
 | Monthly Active Users | Est. Monthly Infra Cost | Key Upgrade |
 |---|---|---|
-| < 200 (MVP) | ~$167 | Current spec |
-| 200–1,000 | ~$300 | Scale to 4 app instances, larger DB |
-| 1,000–5,000 | ~$600 | Read replica, Redis, CDN |
-| 5,000+ | ~$1,200+ | Re-evaluate to microservices |
+| < 200 (MVP) | ~$160 (lean) | Single EC2 + RDS single-AZ |
+| 200–1,000 | ~$300 | ALB + Multi-AZ RDS, CloudWatch alarms |
+| 1,000–5,000 | ~$600 | Auto Scaling Group, RDS read replica, ElastiCache |
+| 5,000+ | ~$1,200+ | Re-evaluate to microservices / ECS/EKS |
 
 ---
 
@@ -550,8 +573,8 @@ databases:
 | Tier | Event | RPO | RTO |
 |---|---|---|---|
 | P1 — DB corruption/deletion | Malicious delete, botched migration | 5 min (PITR) | 1 hour |
-| P2 — App instance failure | Crashed container, OOM | 0 (stateless, auto-restart) | 2 min |
-| P3 — DO region outage | Full fra1 unavailability | 24h (last snapshot) | 4 hours |
+| P2 — EC2 instance failure | Crashed container, OOM | 0 (stateless, ASG/auto-restart) | 2 min |
+| P3 — AWS region outage | Full eu-central-1 unavailability | 24h (last snapshot) | 4 hours |
 | P4 — Secrets exposure | Leaked JWT/DB creds | N/A | 30 min (rotation) |
 
 ### DR Runbooks
@@ -559,66 +582,65 @@ databases:
 #### P1 — Database Recovery
 
 ```bash
-# 1. Identify recovery point
-doctl databases backup list <db-id>
+# 1. List automated snapshots / PITR window
+aws rds describe-db-instances --db-instance-identifier hotel-crm-prod
 
-# 2. Restore to new cluster from PITR
-doctl databases restore <db-id> \
-  --restore-from-timestamp "2026-06-09T02:00:00Z" \
-  --name hotel-crm-restored
+# 2. Restore to a new instance from a point in time
+aws rds restore-db-instance-to-point-in-time \
+  --source-db-instance-identifier hotel-crm-prod \
+  --target-db-instance-identifier hotel-crm-restored \
+  --restore-time "2026-06-09T02:00:00Z"
 
-# 3. Update DATABASE_URL in App Platform to point to restored cluster
-#    (App Platform will rolling-restart automatically)
+# 3. Update DATABASE_URL (Secrets Manager) to point to the restored instance
+#    and restart the EC2 service
 
 # 4. Verify data integrity
 cd backend && npx prisma db pull  # compare schema
 npm run db:seed -- --check-only   # validate row counts
 ```
 
-#### P2 — App Instance Recovery
+#### P2 — Compute Instance Recovery
 
-DO App Platform auto-restarts failed instances. Manual escalation:
+An Auto Scaling Group replaces failed EC2 instances automatically. Manual escalation:
 
 ```bash
-# Force redeploy from last known-good image
-doctl apps create-deployment <app-id> --force-rebuild=false
+# Force a fresh instance / redeploy of last known-good image
+aws autoscaling start-instance-refresh --auto-scaling-group-name hotel-crm-prod-asg
 ```
 
-#### P3 — Region Failover (ams3)
+#### P3 — Region Failover (eu-west-1)
 
 Pre-requisites (set up during initial deployment):
-- DO Spaces cross-region replication: fra1 → ams3 already enabled
-- Weekly DB export stored in ams3 Spaces bucket
+- S3 cross-region replication: eu-central-1 → eu-west-1 already enabled
+- Weekly DB export stored in the eu-west-1 backups bucket
 
 ```bash
-# 1. Restore latest weekly dump to ams3 Managed DB
-pg_restore --clean --if-exists -d $AMS3_DATABASE_URL hotelcrm-backup-latest.dump
+# 1. Restore latest weekly dump to an RDS instance in eu-west-1
+pg_restore --clean --if-exists -d $EUW1_DATABASE_URL hotelcrm-backup-latest.dump
 
-# 2. Deploy App Platform in ams3 region (app.yaml with region: ams)
-doctl apps create --spec .do/app-ams3.yaml
+# 2. Launch EC2 (from AMI/launch template) in eu-west-1 behind a regional ALB
 
-# 3. Update DNS (Cloudflare/DO DNS) A record to point to ams3 load balancer IP
-#    TTL should be pre-set to 60s for fast failover
+# 3. Update Route53 record (or external DNS) to the eu-west-1 ALB
+#    Use a low TTL (60s) on the record for fast failover
 
 # 4. Notify users via status page (status.hotelcrm.app)
 ```
 
-Expected ams3 failover time: **2–4 hours** (restore + DNS propagation).
+Expected eu-west-1 failover time: **2–4 hours** (restore + DNS propagation).
 
 #### P4 — Secrets Rotation (Breach Response)
 
 ```bash
 # Execute within 30 minutes of suspected breach:
 
-# 1. Rotate JWT_SECRET — invalidates ALL active sessions
-#    Update in DO App Platform → rolling deploy auto-triggers
+# 1. Rotate JWT_SECRET in Secrets Manager — invalidates ALL active sessions
+#    Restart the EC2 service to load the new value
 
-# 2. Rotate DB password via DO control panel
-#    Update DATABASE_URL in App Platform
+# 2. Rotate the RDS master password (Secrets Manager rotation)
+#    Update DATABASE_URL secret
 
-# 3. Rotate DO Spaces keys
-#    Generate new key pair in DO control panel
-#    Update DO_SPACES_KEY / DO_SPACES_SECRET in App Platform
+# 3. Rotate IAM credentials / revoke compromised IAM keys
+#    Prefer instance roles so there are no static S3 keys to rotate
 
 # 4. Purge all Session rows (force re-login for all users)
 psql $DATABASE_URL -c "DELETE FROM \"Session\";"
@@ -638,39 +660,41 @@ psql $DATABASE_URL -c \
 
 ### GDPR Incident Obligation
 
-Under GDPR Article 33: personal data breaches must be reported to the relevant DPA (e.g., BfDI for Germany) **within 72 hours** of discovery. The `AuditLog` table and structured logs provide the evidence trail required for the breach notification.
+Under GDPR Article 33: personal data breaches must be reported to the relevant DPA (e.g., BfDI for Germany) **within 72 hours** of discovery. The `AuditLog` table and structured logs provide the evidence trail required for the breach notification. AWS provides a GDPR Data Processing Addendum (DPA) covering EU data residency in eu-central-1 — execute it before storing production personal data.
 
 ---
 
 ## Implementation Checklist
 
 ### Phase 1 — Foundation (Week 1)
-- [ ] Create DO project with VPC in fra1
-- [ ] Provision Managed PostgreSQL (dev + staging + prod clusters)
-- [ ] Configure DO Spaces buckets with versioning and cross-region replication
+- [ ] Create AWS account / Organization; create VPC with public + private subnets in eu-central-1
+- [ ] Provision RDS PostgreSQL (dev + staging + prod instances)
+- [ ] Create S3 buckets (uploads + backups) with versioning, encryption, and "Block public access"
+- [ ] Create ECR repository `hotel-crm/backend`
 - [ ] Set up GitHub Actions CI pipeline with test DB
 - [ ] Add `src/config/env.ts` fail-fast validation
 - [ ] Implement `GET /api/v1/health` endpoint
 
 ### Phase 2 — Security & Observability (Week 2)
 - [ ] Integrate Sentry (backend + both Expo apps)
-- [ ] Configure Winston structured logging with request middleware
-- [ ] Set up DO Monitoring alerts (CPU, memory, DB connections)
+- [ ] Configure Winston structured logging + CloudWatch agent
+- [ ] Set up CloudWatch alarms (EC2 CPU/mem/disk, RDS connections/storage) → SNS → Slack
 - [ ] Configure UptimeRobot with Slack webhook
-- [ ] Implement pre-signed URL generation for DO Spaces file access
-- [ ] Enable rate limiting middleware (express-rate-limit)
+- [ ] Implement pre-signed URL generation for S3 file access (via IAM instance role)
+- [ ] Enable rate limiting middleware (express-rate-limit) + AWS WAF rule on the ALB
 
 ### Phase 3 — CI/CD & Staging (Week 3)
-- [ ] Write `.do/app.yaml` for staging and production App Platform specs
-- [ ] Configure GitHub Actions deploy-staging workflow
+- [ ] Build + push backend image to ECR from CI
+- [ ] Configure GitHub Actions deploy-staging workflow (SSM/CodeDeploy to EC2)
 - [ ] Configure GitHub Actions deploy-production workflow with manual approval gate
 - [ ] Set up EAS Build profiles for worker-app and checker-app
 - [ ] Run first full staging deployment and smoke-test
 
 ### Phase 4 — DR & Hardening (Week 4)
-- [ ] Configure automated weekly DB export to DO Spaces
-- [ ] Document and test P1 DB restore runbook
-- [ ] Pre-configure ams3 failover App Platform spec
-- [ ] Set DNS TTL to 60s on api.hotelcrm.app
+- [ ] Configure automated weekly DB export to S3
+- [ ] Document and test P1 DB restore runbook (RDS PITR)
+- [ ] Pre-configure eu-west-1 failover (AMI/launch template + replicated S3)
+- [ ] Set DNS TTL to 60s on api.hotelcrm.app (Route53 or external DNS)
 - [ ] Schedule monthly backup restore drill (GitHub Actions cron)
 - [ ] Complete GDPR data retention automation for `DataRetentionLog`
+</content>

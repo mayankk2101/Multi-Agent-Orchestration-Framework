@@ -1,5 +1,7 @@
 # MVP EXECUTION MASTER PLAN
 
+> **⚠️ PARTIALLY SUPERSEDED — INFRASTRUCTURE SECTION ONLY (2026-06-19).** The deployment/topology references in this plan (DigitalOcean Droplet, DO Managed PostgreSQL, DO Spaces, Cloudflare) predate the migration to **AWS** (EC2 / RDS / S3 / ECR / CloudWatch / ACM / Route53). Non-infrastructure content remains valid. For the current platform see `AWS_DEPLOYMENT_GUIDE.md` and `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`.
+
 **Status:** CONSOLIDATED — reconciled from recovered authority documents only
 **Date:** 2026-06-10
 **Companion:** `GOVERNANCE_RECOVERY_DELTA_REPORT.md`

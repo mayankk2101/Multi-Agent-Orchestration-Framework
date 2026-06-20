@@ -1,5 +1,7 @@
 # INFRASTRUCTURE IMPLEMENTATION COMPLIANCE REPORT
 
+> **⚠️ SUPERSEDED — HISTORICAL RECORD (2026-06-19).** This document predates the platform migration to **AWS** and references DigitalOcean / Cloudflare infrastructure as it stood at the time. It is preserved unaltered as an audit/decision record. For the current deployment platform see `AWS_DEPLOYMENT_GUIDE.md`, `INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md`, and `AWS_DOCUMENTATION_AUDIT.md`. Do not use the DigitalOcean topology described below for new deployments.
+
 **Scope:** All infrastructure artifacts created on branch `claude/focused-cannon-qwznmo`  
 **Reference documents:** INFRASTRUCTURE_AND_DEPLOYMENT_PLAN.md · PATCH_V1 · PATCH_V2  
 **Date:** 2026-06-10  
