@@ -21,14 +21,27 @@ const STATUS_COLORS: Record<VerificationStatus, string> = {
   FAILED: '#ef4444',
 };
 
+const STATUS_LABELS: Record<VerificationStatus, string> = {
+  PASSED: 'PASSED',
+  NEEDS_REWORK: 'NEEDS REWORK',
+  FAILED: 'FAILED',
+};
+
+function deriveStatus(score: number): VerificationStatus {
+  if (score >= 70) return 'PASSED';
+  if (score >= 40) return 'NEEDS_REWORK';
+  return 'FAILED';
+}
+
 export default function QualityVerificationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
   const [score, setScore] = useState(80);
-  const [status, setStatus] = useState<VerificationStatus>('PASSED');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const derivedStatus = deriveStatus(score);
 
   const handleSubmit = async () => {
     setSaving(true);
@@ -37,7 +50,6 @@ export default function QualityVerificationScreen() {
         assignment_id: id,
         score,
         notes: notes || undefined,
-        status,
       });
       Alert.alert('Submitted', 'Quality verification recorded.', [
         { text: 'OK', onPress: () => router.back() },
@@ -73,15 +85,15 @@ export default function QualityVerificationScreen() {
       alignItems: 'center',
     },
     adjustBtnText: { fontSize: 16, fontWeight: '700', color: theme.text },
-    statusRow: { flexDirection: 'row', gap: 8 },
-    statusChip: {
-      flex: 1,
-      paddingVertical: 10,
+    outcomeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    outcomeBadge: {
+      paddingVertical: 8,
+      paddingHorizontal: 16,
       borderRadius: 10,
-      alignItems: 'center',
       borderWidth: 2,
     },
-    statusChipText: { fontSize: 11, fontWeight: '700' },
+    outcomeBadgeText: { fontSize: 13, fontWeight: '700' },
+    outcomeHint: { fontSize: 12, color: theme.textSecondary, flex: 1 },
     notesInput: {
       backgroundColor: theme.background,
       borderRadius: 10,
@@ -133,24 +145,21 @@ export default function QualityVerificationScreen() {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Outcome</Text>
-          <View style={styles.statusRow}>
-            {(['PASSED', 'NEEDS_REWORK', 'FAILED'] as VerificationStatus[]).map((s) => (
-              <TouchableOpacity
-                key={s}
-                style={[
-                  styles.statusChip,
-                  {
-                    borderColor: STATUS_COLORS[s],
-                    backgroundColor: status === s ? `${STATUS_COLORS[s]}22` : 'transparent',
-                  },
-                ]}
-                onPress={() => setStatus(s)}
-              >
-                <Text style={[styles.statusChipText, { color: STATUS_COLORS[s] }]}>
-                  {s.replace('_', '\n')}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.outcomeRow}>
+            <View
+              style={[
+                styles.outcomeBadge,
+                {
+                  borderColor: STATUS_COLORS[derivedStatus],
+                  backgroundColor: `${STATUS_COLORS[derivedStatus]}22`,
+                },
+              ]}
+            >
+              <Text style={[styles.outcomeBadgeText, { color: STATUS_COLORS[derivedStatus] }]}>
+                {STATUS_LABELS[derivedStatus]}
+              </Text>
+            </View>
+            <Text style={styles.outcomeHint}>Determined by score</Text>
           </View>
         </View>
 
