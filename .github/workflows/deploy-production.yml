@@ -41,10 +41,24 @@ jobs:
         working-directory: backend
 
       - name: Validate migration state (production)
-        # Fail early if the migration history is invalid (failed/partial migration,
-        # drift, or a migration applied to the DB that is missing from the repo).
-        # `migrate status` exits non-zero in these cases, aborting before any deploy.
-        run: npx prisma migrate status
+        # Prisma 5.x (`prisma` ^5.12.0) `migrate status` exits non-zero for THREE
+        # distinct situations and does NOT let us tell them apart via exit code:
+        #   1. pending migrations not yet applied   <- NORMAL before `migrate deploy`
+        #   2. failed / partial migrations          <- must abort
+        #   3. history drift (DB diverges from repo) <- must abort
+        # Gating on the raw exit code would fail every deploy that legitimately
+        # ships a new migration (case 1). Instead we inspect the output and abort
+        # ONLY on failed migrations or drift, letting `migrate deploy` apply
+        # genuinely pending migrations in the next step.
+        run: |
+          set +e
+          STATUS_OUTPUT="$(npx prisma migrate status 2>&1)"
+          echo "$STATUS_OUTPUT"
+          if echo "$STATUS_OUTPUT" | grep -qiE 'failed|diverge|not in sync|drift'; then
+            echo "::error::Migration history shows failed migrations or drift — aborting deploy."
+            exit 1
+          fi
+          echo "Migration state OK (any pending migrations will be applied by migrate deploy)."
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
@@ -57,13 +71,32 @@ jobs:
 
       - name: Deploy to Production EC2 instance
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          # The exact commit that triggered this run and passed the CI gate.
+          # We deploy this SHA rather than a moving `origin/main` so the box
+          # ships precisely the code that was validated (avoids racing a newer,
+          # untested push that landed on main after CI started).
+          DEPLOY_SHA: ${{ github.sha }}
         with:
           host:     ${{ secrets.PROD_EC2_HOST }}
           username: deploy
           key:      ${{ secrets.PROD_SSH_KEY }}
+          envs:     DEPLOY_SHA
           script: |
             set -e
             cd /opt/hotel-crm
+
+            # --- Rollback model (READ BEFORE EDITING) ----------------------------
+            # This is a CODE-ONLY rollback: it restores the previous git SHA and
+            # rebuilds/restarts the services. It does NOT roll back database
+            # migrations — `prisma migrate deploy` has already run in an earlier
+            # step. Therefore the rollback ASSUMES MIGRATIONS ARE BACKWARD-
+            # COMPATIBLE (the old code can run against the new schema).
+            # A destructive / non-backward-compatible migration (dropped column,
+            # renamed table, narrowed type, etc.) cannot be recovered by this
+            # workflow and REQUIRES MANUAL DB RECOVERY (restore from backup /
+            # apply a compensating migration). Keep migrations additive.
+            # ---------------------------------------------------------------------
 
             # Record the currently-deployed SHA so we can roll back to it if the
             # new release fails its health checks (lightweight git-SHA rollback).
@@ -92,7 +125,9 @@ jobs:
               pm2 restart hotel-crm-web --update-env
             }
 
-            build_and_restart origin/main
+            # Deploy the CI-validated commit (falls back to origin/main only if
+            # DEPLOY_SHA was somehow not forwarded, preserving prior behaviour).
+            build_and_restart "${DEPLOY_SHA:-origin/main}"
 
             sleep 10
             if ! curl -sf http://localhost:3001/api/v1/health \
