@@ -183,3 +183,45 @@ describe('Quality createVerification — concurrent duplicate handling (P2-04)',
     ).rejects.toThrow('db down');
   });
 });
+
+describe('Quality Zod validation — createRating (P2-03)', () => {
+  let controller: QualityController;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controller = new QualityController();
+  });
+
+  it('rejects missing worker_id with ValidationError', async () => {
+    const req = makeReq({ assignment_id: 'a1', score: 4 });
+    const res = makeRes();
+    const next = jest.fn() as jest.MockedFunction<(...args: any[]) => any> as unknown as NextFunction;
+
+    await controller.createRating(req, res as unknown as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('rejects score out of range (>5) with ValidationError', async () => {
+    const req = makeReq({ assignment_id: 'a1', worker_id: 'w1', score: 6 });
+    const res = makeRes();
+    const next = jest.fn() as jest.MockedFunction<(...args: any[]) => any> as unknown as NextFunction;
+
+    await controller.createRating(req, res as unknown as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-integer score with ValidationError', async () => {
+    const req = makeReq({ assignment_id: 'a1', worker_id: 'w1', score: 3.5 });
+    const res = makeRes();
+    const next = jest.fn() as jest.MockedFunction<(...args: any[]) => any> as unknown as NextFunction;
+
+    await controller.createRating(req, res as unknown as Response, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ name: 'ValidationError' }));
+    expect(res.status).not.toHaveBeenCalled();
+  });
+});

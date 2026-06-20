@@ -103,19 +103,30 @@ export class QualityService extends BaseService {
         throw new ForbiddenError('worker_id does not match the assignment worker');
       }
 
-      const created = await tx.rating.create({
-        data: {
-          assignment_id,
-          hotel_id: assignment.hotel_id,
-          worker_id,
-          rated_by_id: actor.userId,
-          score,
-          comment: comment ?? null,
-          criteria_scores: criteria_scores
-            ? (criteria_scores as Prisma.InputJsonValue)
-            : Prisma.JsonNull,
-        },
-      });
+      let created;
+      try {
+        created = await tx.rating.create({
+          data: {
+            assignment_id,
+            hotel_id: assignment.hotel_id,
+            worker_id,
+            rated_by_id: actor.userId,
+            score,
+            comment: comment ?? null,
+            criteria_scores: criteria_scores
+              ? (criteria_scores as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+          },
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          throw new ConflictError('Rating already exists for this assignment');
+        }
+        throw error;
+      }
 
       const [agg, totalAssignments, completedAssignments, onTimeAttendance, lastWorked] =
         await Promise.all([
