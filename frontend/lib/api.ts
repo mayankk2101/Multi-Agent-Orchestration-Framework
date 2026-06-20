@@ -3,16 +3,20 @@ import { useAuthStore } from "@/stores/auth";
 import type {
   ApiEnvelope,
   Assignment,
+  Attendance,
   AuthUser,
+  CheckInInput,
   CreateWorkRequestInput,
   HotelSummary,
   ListApplicationsQuery,
   ListAssignmentsQuery,
+  ListAttendanceQuery,
   ListWorkRequestsQuery,
   LoginResponse,
   RefreshResponse,
   UpdateApplicationInput,
   UpdateAssignmentInput,
+  UpdateAttendanceInput,
   UpdateWorkRequestInput,
   WorkApplication,
   WorkRequest,
@@ -272,6 +276,45 @@ export const assignmentsApi = {
       status: "CANCELLED",
       ...(reason ? { cancellation_reason: reason } : {}),
     }),
+};
+
+/** Attendance API matching the backend `/attendance/*` routes. */
+export const attendanceApi = {
+  list: (query: ListAttendanceQuery = {}) =>
+    apiFetch<Attendance[]>(
+      `/attendance${toQuery({
+        ...query,
+        // `toQuery` skips booleans; serialise the verification filter explicitly.
+        is_verified:
+          query.is_verified === undefined
+            ? undefined
+            : String(query.is_verified),
+      })}`,
+    ),
+
+  get: (id: string) => apiFetch<Attendance>(`/attendance/${id}`),
+
+  /** Worker check-in for an assignment (backend RBAC: workers only). */
+  checkIn: (input: CheckInInput) =>
+    apiFetch<Attendance>("/attendance", { method: "POST", body: input }),
+
+  update: (id: string, input: UpdateAttendanceInput) =>
+    apiFetch<Attendance>(`/attendance/${id}`, { method: "PATCH", body: input }),
+
+  /** Worker check-out: records the check-out time (defaults to now). */
+  checkOut: (id: string, checkOutAt: string = new Date().toISOString()) =>
+    attendanceApi.update(id, { check_out_at: checkOutAt }),
+
+  /** Manager/checker verification: confirm the record, optionally set status. */
+  verify: (id: string, status?: UpdateAttendanceInput["status"]) =>
+    attendanceApi.update(id, {
+      is_verified: true,
+      ...(status ? { status } : {}),
+    }),
+
+  /** Manager/checker: set the attendance status (e.g. mark ABSENT/EXCUSED). */
+  setStatus: (id: string, status: NonNullable<UpdateAttendanceInput["status"]>) =>
+    attendanceApi.update(id, { status }),
 };
 
 /** Hotels API — only the read used by the work-request create form. */
