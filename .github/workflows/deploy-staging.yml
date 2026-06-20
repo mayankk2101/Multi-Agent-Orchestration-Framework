@@ -4,6 +4,12 @@ on:
   push:
     branches: [develop]
 
+# Only one staging deployment may run at a time. Overlapping deploys are
+# queued (not cancelled) so an in-flight deploy is never interrupted mid-way.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
 jobs:
   ci:
     name: CI Gate
@@ -33,6 +39,15 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: backend
+
+      - name: Validate migration state (staging)
+        # Fail early if the migration history is invalid (failed/partial migration,
+        # drift, or a migration applied to the DB that is missing from the repo).
+        # `migrate status` exits non-zero in these cases, aborting before any deploy.
+        run: npx prisma migrate status
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
       - name: Run migrations (staging)
         run: npx prisma migrate deploy

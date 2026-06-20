@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
 
+# Only one production deployment may run at a time. Overlapping deploys are
+# queued (not cancelled) so an in-flight deploy is never interrupted mid-way.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   ci:
     name: CI Gate
@@ -34,6 +40,15 @@ jobs:
         run: npm run build
         working-directory: backend
 
+      - name: Validate migration state (production)
+        # Fail early if the migration history is invalid (failed/partial migration,
+        # drift, or a migration applied to the DB that is missing from the repo).
+        # `migrate status` exits non-zero in these cases, aborting before any deploy.
+        run: npx prisma migrate status
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+
       - name: Run migrations (production)
         run: npx prisma migrate deploy
         working-directory: backend
@@ -49,22 +64,45 @@ jobs:
           script: |
             set -e
             cd /opt/hotel-crm
-            git fetch origin main
-            git checkout origin/main
-            # Full install: `npm run build` (tsc) needs backend devDependencies
-            cd backend
-            npm ci
-            npm run build
-            # Full install: `next build` needs typescript + tailwindcss + @tailwindcss/postcss
-            cd ../frontend
-            npm ci
-            npm run build
-            cd /opt/hotel-crm
-            pm2 reload hotel-crm-api --update-env
-            pm2 restart hotel-crm-web --update-env
+
+            # Record the currently-deployed SHA so we can roll back to it if the
+            # new release fails its health checks (lightweight git-SHA rollback).
+            PREV_SHA="$(git rev-parse HEAD)"
+            echo "Previous deployed SHA: $PREV_SHA"
+
+            # build_and_restart <git-ref> — checkout, build backend+frontend, reload pm2.
+            build_and_restart() {
+              git fetch origin main
+              git checkout "$1"
+              # Full install: `npm run build` (tsc) needs backend devDependencies
+              cd /opt/hotel-crm/backend
+              npm ci
+              npm run build
+              # Full install: `next build` needs typescript + tailwindcss + @tailwindcss/postcss
+              cd /opt/hotel-crm/frontend
+              npm ci
+              npm run build
+              # Source secrets so --update-env picks them up (non-login ssh shell).
+              # Matches staging so production and staging load env consistently.
+              set -a
+              source /etc/hotel-crm/.env
+              set +a
+              cd /opt/hotel-crm
+              pm2 reload hotel-crm-api --update-env
+              pm2 restart hotel-crm-web --update-env
+            }
+
+            build_and_restart origin/main
+
             sleep 10
-            curl -sf http://localhost:3001/api/v1/health || { echo "Health check failed — rolling back"; pm2 restart hotel-crm-api; exit 1; }
-            curl -sf http://localhost:3000 > /dev/null || { echo "Frontend health check failed"; pm2 restart hotel-crm-web; exit 1; }
+            if ! curl -sf http://localhost:3001/api/v1/health \
+              || ! curl -sf http://localhost:3000 > /dev/null; then
+              echo "Health check failed — rolling back to $PREV_SHA"
+              build_and_restart "$PREV_SHA"
+              sleep 10
+              curl -sf http://localhost:3001/api/v1/health || echo "WARNING: rollback health check failed — manual intervention required"
+              exit 1
+            fi
             echo "Production deploy successful: $(date -u)"
 
       - name: Tag release
