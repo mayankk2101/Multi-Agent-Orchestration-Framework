@@ -6,18 +6,21 @@ let prisma: PrismaClient | null = null;
 export function getPrisma(): PrismaClient {
   if (!prisma) {
     prisma = new PrismaClient();
-
-    prisma.$connect()
-      .then(() => {
-        logger.info('Connected to database');
-      })
-      .catch((error: unknown) => {
-        logger.error('Failed to connect to database', { error: error instanceof Error ? error.message : String(error) });
-        process.exit(1);
-      });
   }
 
   return prisma;
+}
+
+/**
+ * Establish and verify database connectivity before the server begins
+ * accepting traffic. Unlike getPrisma(), this awaits $connect() so the
+ * caller can fail fast at startup when the database is unavailable instead
+ * of the server listening on a half-ready connection.
+ */
+export async function connectDb(): Promise<void> {
+  const client = getPrisma();
+  await client.$connect();
+  logger.info('Connected to database');
 }
 
 export async function disconnectDb(): Promise<void> {
