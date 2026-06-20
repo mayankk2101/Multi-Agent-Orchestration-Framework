@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/deploy.sh
-# Manual deployment script — run as the deploy user on the Droplet.
-# GitHub Actions calls equivalent steps via SSH; this script is for manual deploys.
+# Manual deployment script — run as the deploy user on the EC2 instance.
+# GitHub Actions calls equivalent steps via SSH/SSM; this script is for manual deploys.
 # Usage: bash scripts/deploy.sh [production|staging] [git-ref]
 set -euo pipefail
 
@@ -18,7 +18,7 @@ echo "==> Deploying [$ENV] from $GIT_REF"
 
 # Verify secret file exists
 if [ ! -f "$SECRET_ENV" ]; then
-  echo "ERROR: $SECRET_ENV not found. Run setup-droplet.sh first." >&2
+  echo "ERROR: $SECRET_ENV not found. Run setup-ec2.sh first." >&2
   exit 1
 fi
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scripts/rotate-secrets.sh
-# Rotate JWT secrets on the Droplet and force all sessions to re-login.
+# Rotate JWT secrets on the EC2 instance and force all sessions to re-login.
+# (When secrets live in AWS Secrets Manager, rotate there and redeploy instead.)
 # Usage: bash rotate-secrets.sh [access|refresh|all]
 set -euo pipefail
 
