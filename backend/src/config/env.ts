@@ -26,12 +26,14 @@ const envSchema = z.object({
   // CORS
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
 
-  // File Storage (DigitalOcean Spaces)
-  DO_SPACES_KEY: z.string().optional(),
-  DO_SPACES_SECRET: z.string().optional(),
-  DO_SPACES_BUCKET: z.string().optional(),
-  DO_SPACES_REGION: z.string().optional(),
-  DO_SPACES_ENDPOINT: z.string().optional(),
+  // File Storage (AWS S3)
+  AWS_REGION: z.string().default('eu-central-1'),
+  S3_BUCKET: z.string().optional(),
+  S3_BUCKET_BACKUPS: z.string().optional(),
+  // Static credentials are optional: prefer the EC2 instance role in deployed
+  // environments. The AWS SDK falls back to the instance role when these are unset.
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
 
   // Email
   EMAIL_SERVICE: z.enum(['sendgrid', 'resend']).optional(),
