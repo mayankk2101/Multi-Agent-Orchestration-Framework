@@ -1,4 +1,4 @@
-import { AssignmentStatus, AttendanceStatus, HotelWorkerStatus, Prisma } from '@prisma/client';
+import { AssignmentStatus, AttendanceStatus, HotelWorkerStatus, Prisma, VerificationStatus } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors.js';
 import { notificationService } from '../notifications/service.js';
@@ -27,7 +27,12 @@ export class QualityService extends BaseService {
     if (existing) throw new ConflictError('Verification already exists for this assignment');
 
     const numScore = score;
-    const derivedStatus = numScore >= 70 ? 'PASSED' : numScore >= 40 ? 'NEEDS_REWORK' : 'FAILED';
+    const derivedStatus: VerificationStatus =
+      numScore >= 70
+        ? VerificationStatus.PASSED
+        : numScore >= 40
+        ? VerificationStatus.NEEDS_REWORK
+        : VerificationStatus.FAILED;
 
     let verification;
     try {
@@ -37,7 +42,7 @@ export class QualityService extends BaseService {
           hotel_id: assignment.hotel_id,
           verified_by_id: actor.userId,
           score: numScore,
-          status: derivedStatus as any,
+          status: derivedStatus,
           notes: notes ?? null,
         },
       });
