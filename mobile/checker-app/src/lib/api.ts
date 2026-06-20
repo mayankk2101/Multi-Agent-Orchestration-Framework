@@ -187,7 +187,6 @@ export const api = {
       assignment_id: string;
       score: number;
       notes?: string;
-      status?: string;
     }) =>
       request<QualityVerification>('/quality/verifications', {
         method: 'POST',
