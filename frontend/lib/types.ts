@@ -192,3 +192,58 @@ export interface UpdateApplicationInput {
   status?: "ACCEPTED" | "REJECTED" | "WITHDRAWN";
   rejection_reason?: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Assignments                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Assignment lifecycle. Mirrors the backend `AssignmentStatus` enum
+ * (prisma/schema.prisma). The UI only ever drives the transitions the
+ * backend allows: CONFIRMED → IN_PROGRESS/CANCELLED and
+ * IN_PROGRESS → COMPLETED/CANCELLED. NO_SHOW and REASSIGNED are produced
+ * by other backend flows and are read-only here.
+ */
+export type AssignmentStatus =
+  | "CONFIRMED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "NO_SHOW"
+  | "CANCELLED"
+  | "REASSIGNED";
+
+/**
+ * A worker assignment as returned by `GET /assignments` and `/assignments/:id`.
+ * Shape mirrors the backend `AssignmentDto`.
+ */
+export interface Assignment {
+  id: string;
+  work_request_id: string;
+  worker_id: string;
+  hotel_id: string;
+  assigned_by_id: string;
+  application_id: string;
+  status: AssignmentStatus;
+  confirmed_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  updated_at: string;
+}
+
+/** Query params accepted by `GET /assignments`. */
+export interface ListAssignmentsQuery {
+  hotel_id?: string;
+  work_request_id?: string;
+  worker_id?: string;
+  status?: AssignmentStatus;
+  page?: number;
+  per_page?: number;
+}
+
+/** Body of `PATCH /assignments/:id`. */
+export interface UpdateAssignmentInput {
+  status?: "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  cancellation_reason?: string;
+}

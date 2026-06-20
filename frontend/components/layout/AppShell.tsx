@@ -16,10 +16,11 @@ interface NavItem {
 }
 
 // Feature routes are added here as modules land under app/(protected)/.
-// Applications, assignments, attendance and notifications remain out of scope.
+// Attendance and notifications remain out of scope.
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/requests", label: "Work requests" },
+  { href: "/assignments", label: "Assignments" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
