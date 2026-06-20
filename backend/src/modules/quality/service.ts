@@ -181,6 +181,17 @@ export class QualityService extends BaseService {
       score,
     });
 
+    // Emit only after the rating transaction has committed. Fire-and-forget,
+    // mirroring the pattern used by createVerification above.
+    void notificationService
+      .sendNotification(worker_id, {
+        type: 'RATING_RECEIVED',
+        title: 'You Received a Rating',
+        message: `You received a rating of ${score} out of 5.`,
+        data: { rating_id: rating.id, assignment_id, score },
+      })
+      .catch(() => {});
+
     return rating;
   }
 

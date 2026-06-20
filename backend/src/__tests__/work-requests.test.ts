@@ -13,10 +13,15 @@ const mockHotelWorker = {
   findFirst: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
 };
 
+const mockNotification = {
+  create: jest.fn() as jest.MockedFunction<(...args: any[]) => any>,
+};
+
 const mockPrisma = {
   hotel: { findUnique: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
   workRequest: mockWorkRequest,
   hotelWorker: mockHotelWorker,
+  notification: mockNotification,
   auditLog: { create: jest.fn() as jest.MockedFunction<(...args: any[]) => any> },
 };
 
@@ -119,11 +124,40 @@ describe('WorkRequestService', () => {
     it('publishes a DRAFT (DRAFT -> OPEN) and bumps version', async () => {
       mockWorkRequest.findUnique.mockResolvedValue(makeRow({ status: 'DRAFT' }));
       mockWorkRequest.update.mockResolvedValue(makeRow({ status: 'OPEN' }));
+      mockHotelWorker.findMany.mockResolvedValue([]);
       await service.update('wr1', { status: 'OPEN' }, 'mgr1', 'manager');
       const data = mockWorkRequest.update.mock.calls[0][0].data;
       expect(data.status).toBe('OPEN');
       expect(data.published_at).toBeInstanceOf(Date);
       expect(data.version).toEqual({ increment: 1 });
+    });
+
+    it('emits WORK_REQUEST_PUBLISHED to each active roster worker on publish', async () => {
+      mockWorkRequest.findUnique.mockResolvedValue(makeRow({ status: 'DRAFT' }));
+      mockWorkRequest.update.mockResolvedValue(makeRow({ status: 'OPEN' }));
+      mockHotelWorker.findMany.mockResolvedValue([
+        { worker_id: 'w1' },
+        { worker_id: 'w2' },
+      ]);
+      mockNotification.create.mockResolvedValue({ id: 'n1' });
+
+      await service.update('wr1', { status: 'OPEN' }, 'mgr1', 'manager');
+
+      const rosterWhere = mockHotelWorker.findMany.mock.calls[0][0].where;
+      expect(rosterWhere).toMatchObject({ hotel_id: 'h1', status: 'ACTIVE' });
+      expect(mockNotification.create).toHaveBeenCalledTimes(2);
+      const types = mockNotification.create.mock.calls.map((c) => c[0].data.type);
+      expect(types).toEqual(['WORK_REQUEST_PUBLISHED', 'WORK_REQUEST_PUBLISHED']);
+      const recipients = mockNotification.create.mock.calls.map((c) => c[0].data.user_id);
+      expect(recipients).toEqual(['w1', 'w2']);
+    });
+
+    it('does not notify on a non-publish PATCH (e.g. cancellation)', async () => {
+      mockWorkRequest.findUnique.mockResolvedValue(makeRow({ status: 'OPEN' }));
+      mockWorkRequest.update.mockResolvedValue(makeRow({ status: 'CANCELLED' }));
+      await service.update('wr1', { status: 'CANCELLED', cancellation_reason: 'x' }, 'mgr1', 'manager');
+      expect(mockHotelWorker.findMany).not.toHaveBeenCalled();
+      expect(mockNotification.create).not.toHaveBeenCalled();
     });
 
     it('cancels with a reason', async () => {

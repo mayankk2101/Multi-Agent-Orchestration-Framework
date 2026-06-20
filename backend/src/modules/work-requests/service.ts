@@ -1,6 +1,7 @@
 import { Prisma, WorkRequest, WorkRequestStatus, HotelWorkerStatus } from '@prisma/client';
 import { BaseService } from '../../lib/base-service.js';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
+import { notificationService } from '../notifications/service.js';
 import {
   CreateWorkRequestInput,
   ListWorkRequestsQuery,
@@ -169,6 +170,9 @@ export class WorkRequestService extends BaseService {
 
     const data: Prisma.WorkRequestUpdateInput = {};
     let statusChanged = false;
+    // True only for the DRAFT -> OPEN publish transition (the transition table
+    // permits OPEN exclusively from DRAFT), so unrelated PATCHes never notify.
+    let isPublishing = false;
 
     if (input.status && input.status !== wr.status) {
       if (!ALLOWED_TRANSITIONS[wr.status]?.includes(input.status as WorkRequestStatus)) {
@@ -177,7 +181,10 @@ export class WorkRequestService extends BaseService {
       const next = input.status as WorkRequestStatus;
       data.status = next;
       statusChanged = true;
-      if (next === WorkRequestStatus.OPEN && !wr.published_at) data.published_at = new Date();
+      if (next === WorkRequestStatus.OPEN) {
+        isPublishing = true;
+        if (!wr.published_at) data.published_at = new Date();
+      }
       if (next === WorkRequestStatus.CANCELLED) {
         data.cancelled_at = new Date();
         data.cancellation_reason = input.cancellation_reason ?? null;
@@ -210,7 +217,36 @@ export class WorkRequestService extends BaseService {
       to_status: updated.status,
     });
 
+    // Notify the hotel's active roster once the publish has committed, so
+    // workers learn a new request is open without polling the marketplace.
+    if (isPublishing) {
+      await this.notifyRosterPublished(updated);
+    }
+
     return this.toDto(updated);
+  }
+
+  // Fan-out a WORK_REQUEST_PUBLISHED notification to every active worker on the
+  // hotel roster. Fire-and-forget per recipient, matching the notification
+  // pattern used elsewhere; a delivery failure never rolls back the publish.
+  private async notifyRosterPublished(wr: WorkRequest): Promise<void> {
+    const roster = await this.prisma.hotelWorker.findMany({
+      where: { hotel_id: wr.hotel_id, status: HotelWorkerStatus.ACTIVE },
+      select: { worker_id: true },
+    });
+
+    await Promise.all(
+      roster.map((r: { worker_id: string }) =>
+        notificationService
+          .sendNotification(r.worker_id, {
+            type: 'WORK_REQUEST_PUBLISHED',
+            title: 'New Work Available',
+            message: `A new ${wr.position} shift is open for applications.`,
+            data: { work_request_id: wr.id, hotel_id: wr.hotel_id },
+          })
+          .catch(() => {})
+      )
+    );
   }
 }
 
