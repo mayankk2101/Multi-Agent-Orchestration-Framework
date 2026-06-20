@@ -13,6 +13,7 @@ import type {
   ListAttendanceQuery,
   ListWorkRequestsQuery,
   LoginResponse,
+  Notification,
   RefreshResponse,
   UpdateApplicationInput,
   UpdateAssignmentInput,
@@ -315,6 +316,16 @@ export const attendanceApi = {
   /** Manager/checker: set the attendance status (e.g. mark ABSENT/EXCUSED). */
   setStatus: (id: string, status: NonNullable<UpdateAttendanceInput["status"]>) =>
     attendanceApi.update(id, { status }),
+};
+
+/** Notifications API matching the backend `/notifications/*` routes. */
+export const notificationsApi = {
+  /** List the current user's notifications (newest first, backend-capped at 50). */
+  list: () => apiFetch<Notification[]>("/notifications"),
+
+  /** Mark a single notification as read; returns the updated record. */
+  markAsRead: (id: string) =>
+    apiFetch<Notification>(`/notifications/${id}/read`, { method: "POST" }),
 };
 
 /** Hotels API — only the read used by the work-request create form. */

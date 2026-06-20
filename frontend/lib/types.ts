@@ -304,6 +304,57 @@ export interface ListAttendanceQuery {
   per_page?: number;
 }
 
+/* -------------------------------------------------------------------------- */
+/*  Notifications                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Notification categories. Mirrors the backend `NotificationType` enum
+ * (prisma/schema.prisma). Read-only on the web: notifications are produced by
+ * backend flows and scheduled jobs; the UI only lists them and marks them read.
+ */
+export type NotificationType =
+  | "WORK_REQUEST_PUBLISHED"
+  | "WORK_REQUEST_CANCELLED"
+  | "WORK_REQUEST_EXPIRING_SOON"
+  | "APPLICATION_RECEIVED"
+  | "APPLICATION_ACCEPTED"
+  | "APPLICATION_REJECTED"
+  | "APPLICATION_WITHDRAWN"
+  | "ASSIGNMENT_CONFIRMED"
+  | "ASSIGNMENT_CANCELLED"
+  | "SHIFT_REMINDER"
+  | "CHECK_IN_REMINDER"
+  | "ATTENDANCE_VERIFIED"
+  | "WORKER_NO_SHOW"
+  | "QUALITY_VERIFICATION_SUBMITTED"
+  | "RATING_RECEIVED"
+  | "REWORK_REQUIRED";
+
+/** Delivery channel. Mirrors the backend `NotificationChannel` enum. */
+export type NotificationChannel = "IN_APP" | "EMAIL" | "PUSH" | "SMS";
+
+/**
+ * A notification as returned by `GET /notifications` (newest first, capped at
+ * 50 by the backend). Shape mirrors the Prisma `Notification` model.
+ */
+export interface Notification {
+  id: string;
+  user_id: string;
+  hotel_id: string | null;
+  type: NotificationType;
+  channel: NotificationChannel;
+  title: string;
+  message: string;
+  /** Resource ids for deep-linking; arbitrary JSON set by the backend. */
+  data: Record<string, unknown> | null;
+  is_read: boolean;
+  read_at: string | null;
+  sent_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
 /** Body of `POST /attendance` (worker check-in). */
 export interface CheckInInput {
   assignment_id: string;
