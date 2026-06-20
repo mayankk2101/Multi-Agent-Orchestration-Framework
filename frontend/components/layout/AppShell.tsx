@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 import { Badge } from "@/components/ui";
 import type { Role } from "@/lib/types";
 
@@ -16,18 +17,19 @@ interface NavItem {
 }
 
 // Feature routes are added here as modules land under app/(protected)/.
-// Notifications remain out of scope.
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/requests", label: "Work requests" },
   { href: "/assignments", label: "Assignments" },
   { href: "/attendance", label: "Attendance" },
+  { href: "/notifications", label: "Notifications" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
 
   const handleLogout = async () => {
     await logout();
@@ -51,13 +53,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "block rounded-md px-3 py-2 text-sm font-medium",
+                  "flex items-center justify-between rounded-md px-3 py-2 text-sm font-medium",
                   active
                     ? "bg-blue-50 text-blue-700"
                     : "text-gray-700 hover:bg-gray-100",
                 )}
               >
-                {item.label}
+                <span>{item.label}</span>
+                {item.href === "/notifications" && unreadCount > 0 && (
+                  <Badge tone="info">{unreadCount}</Badge>
+                )}
               </Link>
             );
           })}
