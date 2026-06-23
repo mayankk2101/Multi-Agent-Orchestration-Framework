@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import dotenv from 'dotenv';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
@@ -59,6 +60,12 @@ let envConfig: Env | null = null;
 
 export function loadEnv(): Env {
   if (envConfig) return envConfig;
+
+  // Load backend/.env into process.env before validation. dotenv does not
+  // override variables already present in process.env, so real environment
+  // variables injected by the orchestrator in production take precedence over
+  // the .env file — making this safe for both local and deployed environments.
+  dotenv.config();
 
   const parsed = envSchema.safeParse(process.env);
 
