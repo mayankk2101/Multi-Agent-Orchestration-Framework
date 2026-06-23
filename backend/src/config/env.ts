@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
@@ -61,11 +63,15 @@ let envConfig: Env | null = null;
 export function loadEnv(): Env {
   if (envConfig) return envConfig;
 
-  // Load backend/.env into process.env before validation. dotenv does not
-  // override variables already present in process.env, so real environment
-  // variables injected by the orchestrator in production take precedence over
-  // the .env file — making this safe for both local and deployed environments.
-  dotenv.config();
+  // Load backend/.env into process.env before validation. The path is resolved
+  // relative to this module (dist/config/env.js -> backend/.env) rather than the
+  // current working directory, so it loads regardless of where `npm start` is
+  // launched from. dotenv does not override variables already present in
+  // process.env, so real environment variables injected by the orchestrator in
+  // production take precedence over the .env file — making this safe for both
+  // local and deployed environments.
+  const envPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '.env');
+  dotenv.config({ path: envPath });
 
   const parsed = envSchema.safeParse(process.env);
 
