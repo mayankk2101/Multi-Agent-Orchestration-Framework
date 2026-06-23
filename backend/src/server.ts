@@ -85,9 +85,18 @@ async function main() {
       });
     });
   } catch (error) {
-    logger.error('Failed to start server', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+    // Startup failure path: report directly to stderr instead of through the
+    // logger. The logger initializes lazily via getEnv(), so if startup failed
+    // because the environment never loaded (e.g. loadEnv() threw), logging here
+    // would throw a second 'Environment not loaded' error and mask the original
+    // exception. Direct stderr output has no dependency on env/logger init and
+    // surfaces the real error, including its stack and any validation messages.
+    process.stderr.write('Failed to start server\n');
+    if (error instanceof Error) {
+      process.stderr.write(`${error.stack ?? error.message}\n`);
+    } else {
+      process.stderr.write(`${String(error)}\n`);
+    }
     process.exit(1);
   }
 }
