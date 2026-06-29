@@ -63,9 +63,18 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
       }),
       // Resolve the loading state once rehydration finishes.
+      //
+      // With synchronous storage (localStorage) Zustand runs this callback
+      // *synchronously* inside the `create()` call above, before the
+      // `useAuthStore` const is initialized. Referencing it directly would
+      // throw a ReferenceError (swallowed by the persist middleware), leaving
+      // `status` stuck on "loading". Defer the update to a microtask so the
+      // binding exists and the change notifies subscribers.
       onRehydrateStorage: () => (state) => {
-        useAuthStore.setState({
-          status: state?.accessToken ? "authenticated" : "unauthenticated",
+        queueMicrotask(() => {
+          useAuthStore.setState({
+            status: state?.accessToken ? "authenticated" : "unauthenticated",
+          });
         });
       },
     },
