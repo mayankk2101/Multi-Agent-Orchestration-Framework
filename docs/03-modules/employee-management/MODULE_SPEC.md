@@ -24,9 +24,9 @@ No behaviour in this document is derived from any other source. Marketplace-era 
 
 ## 1. Module Overview
 
-The Employee Management Module is the system of record for the **employee** as a business entity on the Workforce Operations Platform. Every person who performs work for the client — internally the **Staff (Worker)** role — is a permanent employee whose identity, employment record, skills, lifecycle status, profile-and-history view, day-level availability, and hotel blocklisting are owned here (CRR §1, §4, §5, §20; PDD §9.1).
+The Employee Management Module is the system of record for the **employee** as a business entity on the Workforce Operations Platform. Every person who performs work for the client — internally the **Staff (Worker)** role — is a permanent employee whose identity, employment record, skills, lifecycle status, profile-and-history view, and hotel blocklisting are owned here (CRR §1, §4, §5; PDD §9.1). A day-level availability indicator (CRR §20) exists on the platform; **its owning module is `[OPEN]`** — see §26 OPQ-10.
 
-The platform operates a **workforce operations model**, not a marketplace. Workers do not browse, apply for, or compete for work. Managers assign work directly (via the weekly calendar) or broadcast gap-fill requests to eligible workers. The Employee Management Module supplies the authoritative employee data (identity, skills, status, availability, blocklist) that those operational modules consume; it does not itself perform assignment, scheduling, rating, or attendance (CRR §13; PDD §5.5).
+The platform operates a **workforce operations model**, not a marketplace. Workers do not browse, apply for, or compete for work. Managers assign work directly (via the weekly calendar) or broadcast gap-fill requests to eligible workers. The Employee Management Module supplies the authoritative employee data (identity, skills, status, blocklist) that those operational modules consume; it does not itself perform assignment, scheduling, rating, or attendance (CRR §13; PDD §5.5).
 
 All staff are permanent employees who simply do not earn when they are not assigned to work — this is why the worker-facing application is named the **Employee App** (CRR §4, §31).
 
@@ -37,7 +37,7 @@ To maintain a single, authoritative, legally compliant record of each employee a
 - Each employee has one durable employment record with a well-defined lifecycle status (CRR §4, §6–§10).
 - A unified profile-and-history view serves as the performance-review surface for the worker and every role above them (CRR §5).
 - Skills carried on the employee record drive operational eligibility decisions made by other modules (CRR §4, §13).
-- Day-level availability is represented for operational visibility (CRR §20).
+- A day-level availability indicator is represented for operational visibility; which module owns it is `[OPEN]` (CRR §20; see §26 OPQ-10).
 - Hotel-level blocklisting constrains where an employee may be assigned (CRR §4).
 - Employee personal data is handled under German/EU data-protection law, including special-category restrictions, tiered retention classification, and full auditability (CRR §25–§30; PDD §5.4, §5.7).
 
@@ -50,12 +50,20 @@ In scope for this module:
 - **Employee lifecycle and status** from account creation through activation, the probationary milestone, and deactivation (CRR §6–§10; PDD §9.1).
 - **Skills** carried on the employee record: the confirmed tag set and each tag's assessment basis (CRR §4).
 - **Unified profile-and-history view:** aggregation and presentation of the employee's work history, task scores, and rating history, with date and management filters (CRR §5).
-- **Day-level availability indicator** (red/green, today only) (CRR §20).
+- **Day-level availability indicator** (red/green, today only) (CRR §20) — **included here provisionally; final module ownership is `[OPEN]`** (see §26 OPQ-10).
 - **Blocklist:** a hotel blocking specific staff from assignment there, with a logged reason (CRR §4).
 - **Bulk import** of staff via CSV, routed through the same hire-approval workflow as manual creation (CRR §4).
 - **Employee-data governance:** special-category field visibility rules, retention-tier classification of employee fields, subject-rights data provision, and audit of employee-record actions (CRR §25–§30; PDD §5.4, §5.7).
 
 ## 4. Out of Scope
+
+**Module boundary (Employee Management / Onboarding / Compliance):**
+
+- **Employee Management** owns **employee records and employee state** (identity linkage, core profile fields, lifecycle status, skills, blocklist entries) — this document's subject matter.
+- **Onboarding** owns **onboarding workflows and the hire-approval process** (Personalfragebogen collection, document-collection chatbot, pool/claim review, approve/reject decisioning).
+- **Compliance** owns **policy governance**: retention policy, consent governance, and compliance automation (subject-rights fulfilment, special-category policy).
+
+These three modules do not share ownership of any single rule. Employee Management holds only the *resulting employee state* that Onboarding's and Compliance's processes produce; it does not define, execute, or duplicate those processes.
 
 Owned by other modules and **referenced, never redefined** here (Rule 5):
 
@@ -72,6 +80,7 @@ Owned by other modules and **referenced, never redefined** here (Rule 5):
 - **Payslip request flow** — Payslips module (CRR §23).
 - **Daily GDPR consent gate** — Consent module (CRR §24).
 - **Three-tier automatic deletion jobs** — Retention module (CRR §25).
+- **Policy governance** (retention policy, consent governance, compliance automation, subject-rights fulfilment) — Compliance module (CRR §26, §27, §33).
 - **Hotel and Hotel Group records and the per-hotel "pause new jobs" toggle** — Hotels module (CRR §11).
 - **Basic analytics** — Analytics module (CRR §21).
 
@@ -91,7 +100,7 @@ The module is responsible for:
 2. Owning the **employee lifecycle status** and enforcing valid transitions (CRR §6–§10).
 3. Holding the employee's **skill tags** and their assessment basis, as the authoritative source other modules read (CRR §4, §13).
 4. Composing and serving the **unified profile-and-history view** by aggregating data owned elsewhere (ratings, scores, attendance history) (CRR §5).
-5. Representing **today-only availability** for each employee (CRR §20).
+5. Provisionally representing **today-only availability** for each employee, pending confirmation of final module ownership (CRR §20; see §26 OPQ-10).
 6. Maintaining **hotel blocklist** entries with logged reasons (CRR §4).
 7. Supporting **bulk CSV import**, with each imported employee routed into the standard hire-approval path (CRR §4).
 8. Enforcing **special-category field visibility** and emitting a distinct audit entry on every such access (CRR §27, §30).
@@ -107,7 +116,7 @@ The module is responsible for:
 - **Hotel Group context:** Workers are not tied to any single hotel; a worker may be assigned only within the group of hotels they are working in (CRR §11, §12). *(Association mechanism — see [OPEN] in §26.)*
 - **Skill tag:** One of a fixed, confirmed set; determines which broadcast slots an employee is eligible for and how the employee is assessed (CRR §4, §13).
 - **Profile-and-history view:** A single unified view of full work history, task scores, and rating history — this view *is* the performance review; there is no separate review process (CRR §5).
-- **Availability indicator:** A today-only red/green signal of whether the employee is available for work today (CRR §20).
+- **Availability indicator:** A today-only red/green signal of whether the employee is available for work today (CRR §20). **Owning module `[OPEN]`** — see §26 OPQ-10.
 - **Blocklist entry:** A hotel-scoped block preventing a specific employee from being assigned at that hotel, with a logged reason (CRR §4).
 - **Special-category data:** Konfession (religion, for church tax), disability status, and health data (sick notes) — handled under restricted visibility (CRR §27).
 - **Hire-approval (pool/claim):** The onboarding-owned review by which a completed application becomes an active employee; this module owns the resulting status, not the mechanism (CRR §10).
@@ -116,11 +125,11 @@ The module is responsible for:
 
 The employee lifecycle is the employee-level view of the journey from account creation to active employment and eventual deactivation. The **mechanics** of onboarding (form, chatbot, contract, approval) are owned by the Onboarding, Documents, and Contracts modules; this module owns the **status** that results from each stage.
 
-1. **Record created / Inactive.** An account and employment record come into existence at signup or via bulk CSV import. The record is inactive: it does **not** activate until all required documents are uploaded **and** the contract is filled (CRR §4, §6, §8).
-2. **Onboarding in progress.** The worker completes the Personalfragebogen, uploads required documents (work-permit documents required only for non-EU/EEA/Swiss nationals), and fills the contract; the chatbot re-prompts for anything missing. The record remains inactive throughout (CRR §6, §7, §8, §9).
-3. **Under review.** Once documents and contract are complete, the application enters the Hotel-Group manager pool. The first manager to open it claims it (locking out others, who see "Under review by [manager]"). The record is pending a decision (CRR §10).
-4. **Active (approved) / Rejected.** The claiming manager approves or rejects. Approval activates the employee; rejection ends the journey for that application (CRR §10).
-5. **Probationary period.** Active employees serve a probationary period during which they may work; the manager later manually marks the worker **suitable** (no system timer, no rating-threshold automation). The precise employment/contract semantics of probation depend on an unresolved legal question (see [OPEN] in §26) (CRR §6, §9, §10).
+1. **Record created / Inactive.** An account and employment record come into existence at signup or via bulk CSV import. The record is inactive until onboarding completion criteria owned by the **Onboarding module** are satisfied (CRR §4, §6, §8).
+2. **Onboarding in progress.** The onboarding workflow (Personalfragebogen, document collection, chatbot, contract) is owned and executed by the **Onboarding module** (see Onboarding module specification). This module's only concern is that the record remains **Inactive** for the duration of that workflow (CRR §6, §7, §8, §9).
+3. **Under review.** Once the Onboarding module signals that its workflow is complete, the record moves to **Under Review**, pending a hire-approval decision. The pool/claim review mechanism itself is owned by the **Onboarding module** (see Onboarding module specification) (CRR §10).
+4. **Active (approved) / Rejected.** The Onboarding module's review decision (approve/reject) drives this module's transition to **Active** or **Rejected** (CRR §10).
+5. **Probationary period.** Active employees serve a probationary period; a manual "suitable" marking is recorded against the employee record (no system timer, no rating-threshold automation). The precise employment/contract semantics of probation depend on an unresolved legal question (see [OPEN] in §26) (CRR §6, §9, §10).
 6. **Deactivated.** The platform retains soft-deletion of the account/record, so an employee record can be deactivated without destroying operational history. The **triggering offboarding/termination workflow is not defined** in the authoritative documents (see [OPEN] in §26) (PDD §9.1; CRR §30).
 
 ## 8. Employee Status Model
@@ -176,7 +185,7 @@ The employee profile is composed from data this module owns directly and data it
 - Skills (held on the employee record — see §10).
 - Rating history, task scores, rating tier, and recency-weighted overall rating (Quality module) (CRR §5, §15).
 - Attendance/work history (Attendance module) (CRR §5, §17).
-- Availability indicator (see §11/§13).
+- Availability indicator — owning module `[OPEN]` (see §26 OPQ-10).
 
 There is **no Department field** and **no employment-type distinguishing field** (CRR §4).
 
@@ -220,11 +229,11 @@ Each relationship below names the owning module to avoid duplication (Rule 5):
 
 ## 13. Business Rules
 
-1. An employee record **cannot become Active** unless all required documents are uploaded and the contract is filled (CRR §4, §8).
-2. **Non-EU/EEA/Swiss** nationals require work-permit documents to complete onboarding; EU/EEA/Swiss citizens do not (validation owned by Documents/Onboarding; this module's activation invariant depends on it) (CRR §7).
-3. Hire-approval is a **pool/claim** process: the first manager to open an application claims it; it locks to them; others see "Under review by [manager]" (mechanism owned by Onboarding; this module's status reflects it) (CRR §10).
+1. An employee record **cannot become Active** until the **Onboarding module** signals that its completion criteria are satisfied (see Onboarding module specification) (CRR §4, §8).
+2. Onboarding completion criteria differ by nationality (non-EU/EEA/Swiss vs. EU/EEA/Swiss); this rule is owned and enforced by the **Onboarding/Documents modules** (see those module specifications) — this module only observes the resulting Active/not-Active state (CRR §7).
+3. Hire-approval is owned and executed by the **Onboarding module** (see Onboarding module specification); this module only reflects the resulting status (Under Review / Active / Rejected) (CRR §10).
 4. **Probation suitability is a manual manager judgment** — no system timer, no rating-threshold automation (CRR §10).
-5. A worker is **available for further work on a day only if not already assigned that day and not marked sick/vacation that day** (exclusivity owned by Job Dispatch; sick/vacation owned by Calendar; this module reflects the result in the availability indicator) (CRR §12, §20, §22).
+5. A worker's day-level availability reflects assignment-exclusivity outcomes owned by the **Job Dispatch module** and sick/vacation outcomes owned by the **Calendar module**; this module does not define either rule (CRR §12, §20, §22).
 6. The **availability indicator is today-only** and does not change based on which date is being viewed on the calendar (CRR §20).
 7. A hotel may **blocklist** specific staff from assignment there; the block requires a **logged reason** (CRR §4).
 8. The **unified profile-and-history view** is the performance-review surface — there is no separate performance-review process (CRR §5).
@@ -238,10 +247,9 @@ Each relationship below names the owning module to avoid duplication (Rule 5):
 Employee-status transitions owned by this module. Each transition is audit-logged (§20) and arises from a confirmed event.
 
 - **(none) → Inactive** — record created at signup or via bulk import (CRR §4, §6).
-- **Inactive → Under Review** — documents complete **and** contract filled; application enters the manager pool (CRR §8, §10).
-- **Under Review → Under Review (claimed)** — a manager claims the application; lock applied (mechanism owned by Onboarding) (CRR §10).
-- **Under Review → Active** — claiming manager approves (CRR §10).
-- **Under Review → Rejected** — claiming manager rejects (CRR §10).
+- **Inactive → Under Review** — triggered by the Onboarding module signalling workflow completion (see Onboarding module specification) (CRR §8, §10).
+- **Under Review → Active** — triggered by the Onboarding module's approval decision (see Onboarding module specification) (CRR §10).
+- **Under Review → Rejected** — triggered by the Onboarding module's rejection decision (see Onboarding module specification) (CRR §10).
 - **Active → Active (marked suitable)** — manager manually confirms probation suitability; not an automated transition (CRR §10). Whether this is a *distinct* status is [OPEN] (§26).
 - **Active → Deactivated** — soft-deletion of the record; **triggering workflow is [OPEN]** (PDD §9.1; §26).
 
@@ -274,7 +282,7 @@ Scope rules (PDD §5.4):
 
 - Hotel Manager is scoped to **one hotel**; Regional Manager to **all hotels in their group**; Admin is **system-wide**.
 - Special-category fields sit behind a **separate restricted permission tier**, smaller than general staff-data access; every view/edit is individually audit-logged (CRR §27).
-- The hire-approval (claim/approve/reject) capability is exercised by managers in the Hotel-Group pool; the approval mechanism is owned by Onboarding (CRR §10).
+- Hire-approval permissions are owned by the **Onboarding module** (see Onboarding module specification); this module reflects only the resulting employee status (CRR §10).
 
 > **[OPEN] Self-edit of profile by Staff after onboarding:** Only self-entry of the Personalfragebogen at signup is confirmed (CRR §6). Whether Staff may edit profile fields after activation is unresolved (§26).
 > **[OPEN] Bulk-import permission holder:** Bulk import is confirmed (CRR §4) but the authoritative documents do not state which managerial role(s), beyond Admin, may perform it (§26).
@@ -286,23 +294,24 @@ Scope rules (PDD §5.4):
 This module announces (for other modules and Notifications/Audit to consume):
 
 - **Employee record created** (signup or bulk import; status Inactive) (CRR §4, §6).
-- **Employee submitted for review** (documents + contract complete; entered the pool) (CRR §8, §10).
+- **Employee submitted for review** (Onboarding module signals completion; see Onboarding module specification) (CRR §8, §10).
 - **Employee approved / activated** (CRR §10).
 - **Employee rejected** (CRR §10).
 - **Employee marked suitable** (probation milestone confirmed by manager) (CRR §10).
 - **Employee profile updated** (core/personal fields changed) (CRR §4, §6).
 - **Employee skills changed** (CRR §4).
 - **Employee blocklisted / unblocklisted at a hotel** (with reason) (CRR §4).
-- **Employee availability changed** (today's red/green flipped) (CRR §20).
 - **Employee deactivated** (soft-deleted) (PDD §9.1).
+
+> An "availability changed" event is not listed above: since ownership of the availability indicator is `[OPEN]` (§26 OPQ-10), this module does not assert that it is the producer of that event.
 
 ## 17. Events Consumed
 
 This module reacts to events owned elsewhere in order to keep the profile, availability, and history aggregation current (formal contract **[OPEN]**, §26):
 
 - From **Onboarding/Documents/Contracts:** documents complete; contract filled/signed; hire-approval claimed/approved/rejected → drives lifecycle transitions (CRR §8, §9, §10).
-- From **Job Dispatch:** worker assigned for a day (direct or broadcast) → marks the worker unavailable for the day and contributes to history (CRR §12, §13, §20).
-- From **Calendar/Scheduling:** worker marked sick or vacation for a day (which auto-cancels any same-day assignment) → updates today's availability (CRR §20, §22).
+- From **Job Dispatch:** worker assigned for a day (direct or broadcast) → contributes to history; also relevant to the availability indicator, whose owning module is `[OPEN]` (§26 OPQ-10) (CRR §12, §13, §20).
+- From **Calendar/Scheduling:** worker marked sick or vacation for a day (which auto-cancels any same-day assignment) → relevant to the availability indicator, whose owning module is `[OPEN]` (§26 OPQ-10) (CRR §20, §22).
 - From **Quality:** new rating/score recorded; warning thresholds crossed (< 70, < 50) → reflected in the profile-and-history view (display only; no status change) (CRR §5, §15, §16).
 - From **Attendance:** clock-in/clock-out recorded → contributes to work history surfaced in the profile view (CRR §5, §17).
 
@@ -323,9 +332,9 @@ This module reacts to events owned elsewhere in order to keep the profile, avail
   - **Tier 1 — shift clock-in/out coordinates:** 6 months (attendance-linked) (CRR §17, §25).
   - **Tier 2 — general personal/profile data:** 5 years (CRR §25).
   - **Tier 3 — payroll/tax-adjacent fields** (IBAN, Tax ID, payslip-request records, wage records): 6 years (CRR §25).
-- **Special-category data** (Konfession, disability, health/sick data) is voluntary where applicable, restricted in visibility, tied to a named legal basis, never shown on the general profile, and individually audit-logged on each access (CRR §27).
+- **Special-category data** (Konfession, disability, health/sick data) is voluntary where applicable, restricted in visibility, tied to a named legal basis, never shown on the general profile, and individually audit-logged on each access. This module enforces the restriction as the holder of these fields; the underlying legal-basis policy is owned by the **Compliance module** (CRR §27).
 - **Sick leave requires no doctor's note** — a plain "sick" calendar flag avoids storing sensitive health data (owned by Calendar; noted because it shapes what health data the employee record never holds) (CRR §27).
-- **Subject-rights requests** (data access/export) are handled automatically, via a button or the chatbot; this module supplies the employee's data for fulfilment (CRR §26).
+- **Subject-rights requests** (data access/export) are handled automatically, via a button or the chatbot; this automation is owned by the **Compliance module**, and this module only supplies the employee's data for fulfilment (CRR §26).
 - **Legal-basis-per-field:** data minimization is not actively pruned, but each collected field remains tied to a stated legal basis (CRR §26).
 - **Soft deletion** of the employee record is retained, preserving the ability to delete identity while honouring retention of operational/audit history (PDD §9.1; CRR §30).
 
@@ -344,16 +353,16 @@ This module reacts to events owned elsewhere in order to keep the profile, avail
 - **Work-permit documents** are required to complete onboarding for non-EU/EEA/Swiss nationals and not required for EU/EEA/Swiss citizens (rule owned by Documents/Onboarding; this module honours it as an activation precondition) (CRR §7).
 - **Skill tags** must be drawn from the confirmed set: Cleaner, Public Service, Kitchen Dishwasher, Waiter (CRR §4).
 - **Core fields** Employee ID, Job Title, and Start Date are part of the employee record (CRR §4).
-- **Sick/vacation** may be marked only for the current day or future days, never past days (rule owned by Calendar; noted because it constrains availability inputs) (CRR §22).
+- **Sick/vacation marking rules** are owned by the **Calendar module** (see Calendar module specification); this module only consumes the resulting day-level state as an availability input (CRR §22).
 - **Blocklist** entries require a reason (CRR §4).
 - **Bulk CSV import** validates each row and routes successfully created staff through hire-approval; **invalid-row and duplicate handling is [OPEN]** (§26) (CRR §4).
 - **Personalfragebogen field formats** (e.g., IBAN, Tax ID, social-security number) are validated at the point of capture by the Onboarding module; this module stores validated values and does not re-define their formats (CRR §6).
 
 ## 22. Error Scenarios
 
-- **Activation attempted with incomplete onboarding** → blocked; the account stays inactive until documents and contract are complete (the chatbot re-prompts for missing items) (CRR §4, §8).
-- **Non-EU national missing work-permit documents** → onboarding cannot complete, so the employee cannot reach Active (CRR §7, §8).
-- **Two managers attempt to review the same application** → the first claims it; the second is shown "Under review by [manager]" rather than an error or silent failure (CRR §10).
+- **Activation attempted before Onboarding signals completion** → blocked; the record remains Inactive (mechanism owned by the Onboarding module; see its specification) (CRR §4, §8).
+- **Onboarding completion criteria unmet for a given nationality** → the record cannot reach Active (rule owned by the Onboarding/Documents modules; see their specifications) (CRR §7, §8).
+- **Concurrent hire-approval review conflicts** → resolved entirely within the Onboarding module (see its specification); this module only receives the resulting Active/Rejected decision (CRR §10).
 - **Assignment attempted for a blocklisted worker at that hotel** → not permitted (enforced at assignment time by Job Dispatch using this module's blocklist) (CRR §4).
 - **Access to a special-category field without the restricted permission** → denied, and the attempt is audit-logged (CRR §27, §30).
 - **Bulk import contains invalid rows** → valid staff are created and routed to approval; handling of the invalid rows is **[OPEN]** (§26) (CRR §4).
@@ -361,11 +370,11 @@ This module reacts to events owned elsewhere in order to keep the profile, avail
 ## 23. Edge Cases
 
 - **EU/EEA/Swiss vs non-EU determination** hinges on nationality; **dual nationality or a change of nationality** is not addressed by the authoritative documents → **[OPEN]** (§26) (CRR §7).
-- **Worker marks sick/vacation after being assigned that day** → the existing same-day assignment is auto-cancelled and today's availability flips to red (cancellation owned by Calendar; availability reflected here) (CRR §22, §20).
+- **Worker marks sick/vacation after being assigned that day** → the existing same-day assignment is auto-cancelled (cancellation owned by Calendar); the effect on the availability indicator is subject to the ownership open question (§26 OPQ-10) (CRR §22, §20).
 - **Worker with no skill tags** → eligible for no broadcast slots (eligibility owned by Job Dispatch) (CRR §13).
 - **Fewer than 10 completed jobs** → the recency-weighted overall rating still computes from available history (owned by Quality; surfaced here) (CRR §15).
 - **Deactivated worker** → operational history and audit entries remain intact and retrievable within retention horizons (CRR §30; PDD §9.1).
-- **Availability viewed against a future/past calendar date** → the indicator does not change; it reflects *today* only (CRR §20).
+- **Availability viewed against a future/past calendar date** → the confirmed rule is that the indicator does not change and reflects *today* only; which module implements this is subject to the ownership open question (§26 OPQ-10) (CRR §20).
 - **Worker's Hotel-Group association** governs the set of hotels they can be assigned within; the **mechanism establishing that association is [OPEN]** (§26) (CRR §12).
 
 ## 24. Dependencies
@@ -413,7 +422,7 @@ Genuine unresolved items. Items 1–3 are the three open product questions recor
 - **[OPEN] OPQ-7 — Org-chart / reporting structure.** Visibility (Regional Manager + Admin) is confirmed, but the underlying reporting-relationship model is undefined (CRR §1).
 - **[OPEN] OPQ-8 — Formal domain-event contract.** The authoritative documents describe an event/job flow but enumerate no event schema/transport for §16–§17 (PDD §5.5).
 - **[OPEN] OPQ-9 — Bulk-import row handling & permission holder.** Invalid-row and duplicate handling, and which managerial roles (beyond Admin) may import, are unspecified (CRR §4).
-- **[OPEN] OPQ-10 — Availability-indicator derivation.** Confirmed inputs are same-day assignment and sick/vacation; the exact derivation rule and its precise ownership boundary are not stated (CRR §20).
+- **[OPEN] OPQ-10 — Availability-indicator ownership and derivation.** CRR §20 confirms that a today-only red/green availability indicator exists and confirms its inputs are limited to same-day assignment and sick/vacation state, but does not name an owning module, and PDD does not assign it either. Employee Management, Calendar, and Job Dispatch are all plausible owners since each holds part of the relevant state. **Ownership will be finalized once the remaining scheduling-related modules (Calendar, Job Dispatch) are frozen**; until then, this document describes the indicator's existence and confirmed behaviour only, and does not claim ownership on behalf of Employee Management.
 - **[OPEN] OPQ-11 — Job Title value domain.** A Job Title field is confirmed, but whether it is free text or a controlled list is not specified (CRR §4).
 - **[OPEN] OPQ-12 — Skill-set governance.** The skill tag set and assessment bases are fixed; whether the set is administratively editable is unspecified (CRR §4).
 
@@ -441,7 +450,6 @@ This module is a **refactor** within the marketplace → Workforce Operations Pl
 - The retained roster record becomes the **permanent-employment record**, reflecting that all staff are permanent employees who earn only when assigned (PDD §9.1; CRR §4, §31).
 - The employee's relationship to work changes from *applying/competing* to **being directly assigned or broadcast-eligible**; assignment no longer depends on a prior application (PDD §9.1; CRR §13).
 - The profile-and-history view becomes the **single performance-review surface** (no separate review process) (CRR §5).
-- Availability is expressed as a **today-only red/green indicator** rather than any marketplace availability semantics (CRR §20).
 - The lifecycle status set is reduced to confirmed states (Inactive, Under Review, Active, Rejected, Deactivated), with rating "tiers" explicitly separated out as Quality-owned display labels (CRR §10, §15, §16).
 
 **New components:**
