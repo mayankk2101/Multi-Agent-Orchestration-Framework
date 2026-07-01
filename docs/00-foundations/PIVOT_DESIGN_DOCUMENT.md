@@ -93,7 +93,7 @@ Every requirement below is confirmed by the client. Each lists why it is needed 
   - *Why:* Legally required to register a worker with German authorities before they may work.
 - **Work-permit / residence data** required **only** for non-EU/EEA/Swiss nationals (EU citizens are exempt).
 - **Onboarding chatbot (Claude agent):** collects required documents conversationally; re-prompts on incomplete uploads; account stays inactive until complete.
-- **Contract:** stored in-system and shown to the worker to fill; signed **by hand** (physical signature — no e-signature/QES). Lifecycle: 1-year fixed-term (incl. 6-month probation, 2-week notice during probation) → optional +1-year extension (no new probation) → permanent (open-ended) after 2 years.
+- **Contract:** system generates a pre-filled PDF → printed → signed **by hand** on paper in person (no e-signature/QES) → **manager uploads the scan and marks it signed** (Option A), which activates the account. Lifecycle: 1-year fixed-term (incl. 6-month probation, 2-week notice during probation) → optional +1-year extension (no new probation) → permanent (open-ended) after 2 years.
 - **Approval:** completed application routed to the **Hotel Group manager pool**; first manager to open **claims** it (locked to prevent double-review); approves or rejects.
 - **Familiarization & probation:** a familiarization period of **max 2 trial days** precedes any contract; both parties must agree to proceed. Suitability is a **manual manager judgment**. The 6-month probation period sits inside the initial 1-year fixed-term contract.
 ## 4.3 Hotels & groups
@@ -290,8 +290,12 @@ graph TB
 - **Inputs:** Worker acceptance per calendar day; current notice version.
 - **Outputs:** Access granted for the day; consent-log entry; on decline → access blocked + manager notified.
 ## 7.7 HR / Contracts / Payslip
-- **Purpose:** Store hand-signed contracts, track contract lifecycle/expiry, handle payslip requests.
-- **Outputs:** Stored hand-signed contract; expiry reminders (1yr, 2yr, then none once permanent); payslip request → manager email (manual fulfilment). No payroll computation.
+- **Purpose:** Generate contracts, hold scanned hand-signed contracts, track lifecycle/expiry, handle payslip requests.
+- **Contract flow (handwritten, manager-confirmed — Option A):** system generates a pre-filled PDF from Personalfragebogen data → made available to print → both parties sign on paper in person → **manager uploads the scan and marks "signed & valid"** → status flips to signed/active, account activates, 1-year expiry clock starts.
+- **Inputs:** Worker data for PDF generation; scanned signed contract upload; manager confirmation.
+- **Outputs:** Generated contract PDF; stored scanned signed contract (S3 EU); contract status (pending → signed → active); expiry reminders (before 1yr, before 2yr, none once permanent); payslip request → manager email (manual). No payroll computation.
+- **Trust boundary:** system does NOT capture, verify, or auto-detect the signature — it records the manager's confirmation and stores the evidence.
+- **Failure modes:** account cannot activate until a contract file is uploaded AND marked signed; a visible "contract pending signature" status prevents forgotten contracts; bad/blurry scan is a manual re-upload.
 ---
 # 8. Complete System Flow
 ## 8.1 Onboarding sequence
@@ -315,14 +319,15 @@ sequenceDiagram
         BOT->>W: Re-prompt for missing items
     end
     BOT->>S3: Store documents
-    BE->>W: Present contract to fill
-    W->>W: Sign by hand (physical signature)
-    W->>BE: Upload signed contract
-    BE->>S3: Store hand-signed contract
-    BE->>MP: Place application in Hotel-Group pool
+    BE->>W: Generate pre-filled contract PDF
+    W->>W: Print + sign on paper (both parties, in person)
+    Note over W,MP: Handwritten signature happens offline
+    MP->>BE: Upload scanned signed contract + mark "signed & valid"
+    BE->>S3: Store scanned signed contract
+    BE->>MP: Application in Hotel-Group pool
     MP->>BE: First manager claims (locked)
     MP->>BE: Approve / Reject
-    BE->>W: Account activated or rejected
+    BE->>W: Account activated (only if contract marked signed) or rejected
 ```
 ## 8.2 Broadcast job-request sequence
 ```mermaid
@@ -382,7 +387,7 @@ sequenceDiagram
 |---|---|
 | PersonalData | Personalfragebogen fields (incl. restricted Konfession, disability) |
 | WorkerDocument | Uploaded docs + expiry; work-permit (non-EU only) |
-| Contract | Stored hand-signed contract; lifecycle (1yr fixed-term → +1yr → permanent); 6-month probation; expiry-reminder state |
+| Contract | Generated PDF + stored **scanned** hand-signed contract; status (pending→signed→active) set by manager confirmation; lifecycle (1yr fixed-term → +1yr → permanent); 6-month probation; expiry-reminder state |
 | ConsentLog | Daily consent acceptance (per day, per notice version) |
 | RetentionLog | Tracks deletion eligibility per data category |
 | CalendarEntry | Per-worker per-day assignment / sick / vacation |

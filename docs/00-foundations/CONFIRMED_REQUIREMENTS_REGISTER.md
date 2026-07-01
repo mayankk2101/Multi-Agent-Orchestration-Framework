@@ -125,6 +125,19 @@
 - 🔵 Familiarization period is limited to a **maximum of two trial days** and always complies with applicable legal requirements
 - 🔵 An employment contract is concluded ONLY if both parties agree to proceed after the familiarization period
 
+### Physical signing — how the system handles it (Option A: manager-confirmed)
+- 🔵 The system **generates a pre-filled contract PDF** from the worker's Personalfragebogen data (name, start date, terms, 1-year fixed term, 6-month probation clause, etc.)
+- 🔵 The contract is made available to **download/print**
+- 🔵 Both parties sign on **paper, in person** (typically during the familiarization days, since the worker is on-site)
+- 🔵 The signed paper contract is **scanned/photographed and uploaded** back into the app, attached to that worker's record (mechanically treated like any other document upload)
+- 🔵 Signed contracts are stored in **S3 (EU)**
+- 🔵 **Confirmation mechanism (Option A):** the **manager** uploads the scanned signed contract and marks it "signed contract received & valid." This action flips the worker's contract status to signed/active.
+- 🔵 The system **trusts the manager's confirmation** — it does NOT attempt to detect, verify, or validate the handwritten signature itself
+- 🔵 Marking the contract signed is what **activates the account** and **starts the 1-year expiry clock** (and the reminder schedule)
+- 🔵 Safeguard: the account **cannot activate** until a contract file is uploaded AND marked signed by the manager
+- 🔵 Safeguard: a visible **"contract pending signature"** status exists so unsigned contracts are not forgotten
+- 🔵 What the system does NOT do: capture the signature, verify authenticity, or auto-detect that a document is signed
+
 ### Contract lifecycle (fixed-term → extension → permanent)
 - 🔵 The initial employment contract is a **fixed-term contract for ONE year**
 - 🔵 It includes a **six-month probation period**
