@@ -24,7 +24,7 @@ The Onboarding Module is the system responsible for **new-hire intake, document 
 
 The module is customer-facing for workers (self-service signup, Personalfragebogen form, document upload chatbot, contract e-signature) and manager-facing for hiring decisioning (pool/claim review mechanism, approve/reject).
 
-Onboarding produces two critical outputs: (1) a **completed employee hire**, reflected as a new Inactive employee record in the Employee Management module, and (2) a **manager decision** (approve/reject) that transitions the employee toward Active or Rejected status (CRR §6–§10; PDD §9.1).
+Onboarding produces two critical outputs: (1) a **completed employee hire**, reflected as a new Inactive employee record in the Employee Management module, and (2) a **manager decision** (approve/reject) that transitions the employee toward Active or Rejected status (CRR §6–§10; EM §7–§8).
 
 ## 2. Purpose
 
@@ -32,7 +32,7 @@ To provide a legally compliant, documented, and auditable new-hire workflow that
 
 - Captures the **Personalfragebogen** (German onboarding form) during self-service signup, so workers register with German authorities during probation (CRR §6).
 - Collects all **required documents and work permits** with AI-guided assistance, ensuring compliance with work-permit regulations for non-EU workers (CRR §7, §8).
-- Delivers and captures the **contract with QES (Qualified Electronic Signature)** to establish a legally binding fixed-term employment relationship (CRR §9; PDD §5.6).
+- Delivers and captures the **contract with QES (Qualified Electronic Signature)** to establish a legally binding fixed-term employment relationship (CRR §9; PDD §5.2, §7.1).
 - Implements a **pool/claim hiring-approval mechanism** so managers can review, claim, and decide on new hires without duplicate simultaneous review (CRR §10).
 - Routes hiring decisions to the Employee Management module, which reflects the outcome in employee lifecycle state (CRR §10; EM Module §7).
 
@@ -43,7 +43,7 @@ In scope for this module:
 - **Personalfragebogen (new-hire form):** a self-service digital form with all confirmed German onboarding fields (CRR §6).
 - **Document collection and validation:** capturing required documents from workers; geofencing work-permit requirements to non-EU/EEA/Swiss workers (CRR §7).
 - **Chatbot-guided document collection:** an AI agent using the Claude API to query workers for missing documents with cost controls and fallback to static UI (CRR §8).
-- **Contract delivery and QES signing:** presenting the employment contract and capturing its signature via a QES provider (CRR §9; PDD §5.6).
+- **Contract delivery and QES signing:** presenting the employment contract and capturing its signature via a QES provider (CRR §9; PDD §5.2, §7.1).
 - **Pool/claim hiring review:** a shared inbox mechanism where managers claim applications, review materials, and approve/reject new hires (CRR §10).
 - **Hire approval decisioning:** manager judgment on probation suitability and contract approval — entirely manual, no rating thresholds or automation (CRR §10).
 - **Employment record creation:** once approved, provisioning a new Inactive employee record in Employee Management (CRR §10; EM Module §7).
@@ -60,11 +60,11 @@ In scope for this module:
 Owned by other modules and **referenced, never redefined** here:
 
 - **Worker platform account and authentication** — Authentication module (CRR §2).
-- **Employee record creation and employee lifecycle state transitions** — Employee Management module; Onboarding requests state changes that EM executes (CRR §6–§10; EM Module §7).
-- **Skills, job titles, and other core employee profile fields** — Employee Management module (EM Module §3).
-- **Document storage backend and non-EU work-permit validation logic** — Documents module (CRR §7).
-- **Contract template ownership and version control** — Documents/Compliance module (CRR §9).
-- **QES provider integration and signature capture** — Contracts module (CRR §9; PDD §5.6).
+- **Employee record creation and employee lifecycle state transitions** — Employee Management module; Onboarding requests state changes that EM executes (CRR §6–§10; EM §7).
+- **Skills, job titles, and other core employee profile fields** — Employee Management module (EM §9 Employee Profile, §10 Skills).
+- **Document storage, expiry tracking, and the non-EU work-permit requirement** (including validation of work-permit documents) — Documents module (CRR §7; EM §4).
+- **Contract template ownership, version control, storage, and QES signing** — Contracts module (CRR §9; EM §4).
+- **QES provider integration and signature capture** — Contracts module (CRR §9; PDD §5.2, §7.1).
 - **Chatbot user data and GDPR subject-rights exports** — the chatbot is reused for subject-rights requests; Compliance module owns the subject-rights workflow and data provision (CRR §8, §26; [OPEN] event contract — see §26 OPQ-3).
 - **Special-category data handling, retention tiers, and policy enforcement** — Compliance module (CRR §25–§27; PDD §5.4, §5.7).
 - **Three-tier automatic deletion jobs** — Retention module (CRR §25).
@@ -83,9 +83,9 @@ The module is responsible for:
 
 1. **Personalfragebogen capture:** providing a self-service digital form with all confirmed fields, presented during initial signup (CRR §6).
 2. **Document collection orchestration:** determining which documents are required based on worker nationality/residency status; requesting them via chatbot and fallback UI (CRR §7, §8).
-3. **Chatbot execution:** running an AI-guided conversation with cost controls, caching, token limits, and graceful fallback (CRR §8; PDD §5.6).
+3. **Chatbot execution:** running an AI-guided conversation with cost controls, caching, token limits, and graceful fallback (CRR §8; PDD §4.14, §7.1).
 4. **Contract presentation:** delivering the employment contract template and coordinating with Contracts module on QES signing (CRR §9).
-5. **QES coordination:** requesting Qualified Electronic Signature from the chosen provider (Skribble recommended) and capturing the signed contract (CRR §9; PDD §5.6).
+5. **QES coordination:** requesting Qualified Electronic Signature from the chosen provider (Skribble recommended) and capturing the signed contract (CRR §9; PDD §5.2, §7.1).
 6. **Account activation gate:** blocking account activation until all required documents are uploaded AND contract is signed (CRR §8).
 7. **Pool/claim mechanism:** managing a shared inbox of pending applications visible to all Hotel Group managers; supporting claiming, locking, and preventing simultaneous review (CRR §10).
 8. **Hire approval:** capturing manager decisions (approve/reject) and probation suitability assessment (CRR §10).
@@ -143,7 +143,7 @@ The module is responsible for:
 
 **Definition:** An AI agent that guides workers through document collection during signup, asking for missing documents until all requirements are satisfied.
 
-**Specifications** (CRR §8; PDD §5.6):
+**Specifications** (CRR §8; PDD §4.14, §7.1):
 
 - **Provider:** Claude API (not a static wizard; an AI agent).
 - **Model:** Claude Haiku (cheapest tier) recommended.
@@ -163,14 +163,14 @@ The module is responsible for:
 
 **Definition:** A fixed-term employment contract signed with Qualified Electronic Signature (QES), establishing a legally binding employment relationship.
 
-**Specifications** (CRR §9; PDD §5.6):
+**Specifications** (CRR §9; PDD §5.2, §7.1):
 
 - The contract is the **same document** used at signup and after probation (one document, not two). If differences are needed in future, they are introduced later through a separate process.
 - Contract is shown to the worker so they can review and sign.
 - Signature method: **Qualified Electronic Signature (QES)**, not simple e-signature.
 - **Why QES is mandatory:** Fixed-term employment contracts in Germany (§14(4) TzBfG) **require QES** to establish the fixed term; a simple e-signature would invalidate the fixed-term clause.
 - **QES provider:** Skribble recommended (native QES, EU/German hosting, API-embeddable); alternatives: Yousign, sproof.
-- **Contract ownership:** Contract template and versioning are owned by the Contracts/Compliance module; Onboarding coordinates signature capture.
+- **Contract ownership:** Contract template, versioning, storage, and QES signing are owned by the **Contracts module** (EM §4); Onboarding coordinates presentation and signature capture.
 - **Account activation gate:** The account does NOT activate until the contract is signed (CRR §8).
 
 **Open questions** (CRR §9):
@@ -216,7 +216,7 @@ The onboarding lifecycle progresses through the following states:
 9. **Under manager review** — Manager has claimed the application and is reviewing.
 10. **Approved** — Manager approves; Employee Management module is requested to create Inactive employee record.
 11. **Rejected** — Manager rejects; worker is notified; application is archived.
-12. **Employee record created (Inactive)** — EM module confirms creation; onboarding is complete. Employee awaits HR administrative activation (probation end + EM module §8.2).
+12. **Employee record created (Inactive)** — EM module confirms creation; onboarding is complete. The employee record then follows the Employee Management lifecycle (EM §7 Employee Lifecycle; §8 Employee Status Model).
 
 **Account activation gate:** States 1–7 result in an activated platform account. Account is **blocked** until state 7 is reached (CRR §8).
 
@@ -377,9 +377,7 @@ Every Onboarding action produces an audit log entry:
 
 - **Document type:** Chatbot specifies which document types it will accept (e.g., PDF, JPG); system rejects unsupported types.
 - **File size:** [OPEN] maximum file size per document.
-- **Non-EU status validation:** System determines work-permit-requirement status by:
-  - Comparing Nationality field from Personalfragebogen against EU/EEA/Swiss country list.
-  - No manual override; rule is deterministic.
+- **Non-EU work-permit requirement:** The **Documents module** owns the work-permit requirement rule and its validation — non-EU/EEA/Swiss nationals require a work-permit document; EU/EEA/Swiss nationals are exempt (CRR §7; EM §4). Onboarding supplies the worker's Nationality (from the Personalfragebogen) and orchestrates collection; it does not independently define the rule. The rule is deterministic (Nationality vs. EU/EEA/Swiss list); no manual override.
 - **Missing documents:** If required documents are missing, chatbot re-prompts; account cannot activate (§7, gate).
 
 ### 15.3 Contract Signing Validation
@@ -450,7 +448,7 @@ Every Onboarding action produces an audit log entry:
 
 ### 17.1 EU/EEA/Swiss Citizen (No Work Permit Required)
 
-A worker with Nationality = Austria, Poland, etc., skips the work-permit document requirement. Chatbot correctly recognizes this and does NOT request work-permit documents (CRR §7).
+A worker with Nationality = Austria, Poland, etc., is exempt from the work-permit document requirement. Applying the Documents-module-owned requirement rule (EM §4), Onboarding does NOT request work-permit documents for this worker (CRR §7).
 
 ### 17.2 Personalfragebogen Data Mismatch
 
@@ -476,8 +474,8 @@ Onboarding may contain a GDPR consent gate (e.g., data-processing consent for ch
 4. **Contracts:** Manages contract template, versioning, and storage (CRR §9).
 5. **Compliance:** Owns data retention, consent governance, and special-category handling; Onboarding defers to it (CRR §25–§27).
 6. **Hotels:** Hotel Group context for pool/claim scope (managers see applications for their Hotel Group) (CRR §11).
-7. **Claude API:** Powers the document-collection chatbot and subject-rights agent (CRR §8; PDD §5.6).
-8. **QES Provider (Skribble/Yousign/sproof):** Signs contracts on worker's behalf (CRR §9; PDD §5.6).
+7. **Claude API:** Powers the document-collection chatbot and subject-rights agent (CRR §8; PDD §4.14, §7.1).
+8. **QES Provider (Skribble/Yousign/sproof):** Signs contracts on worker's behalf (CRR §9; PDD §5.2, §7.1).
 9. **Notifications:** Sends notifications to managers and workers (application ready, approval, rejection) (CRR §18).
 
 **Outbound dependencies** (modules that consume Onboarding):
@@ -532,7 +530,7 @@ The following genuine unknowns are unresolved and will block final implementatio
 
 **OPQ-6: Probation legal shape (fixed-term trial vs. permanent with clause)**
 - Determines whether QES is mandatory from day one.
-- Also impacts Employee Management §9.2 probation-state definition.
+- Also impacts Employee Management §8 (Employee Status Model, probation milestone); aligns with EM §26 OPQ-1 (probation legal shape).
 - Impacts: Contract design; signature requirement; legal compliance.
 
 **OPQ-7: Contract expiry/renewal length**
@@ -587,7 +585,7 @@ Onboarding **feeds into** Employee Management via the `HireApproved` → `Employ
 - EM owns employee records, lifecycle states, and field definitions.
 - Onboarding owns intake, documents, contract, and hire-approval decisioning.
 
-No circular dependency; flow is unidirectional.
+The hire flow is conceptually forward (Onboarding → Employee Management), but the runtime event exchange is **bidirectional**: Onboarding emits `HireApproved` and consumes Employee Management's `EmployeeRecordCreated` acknowledgement (§11). Ownership is non-overlapping — Onboarding owns intake/approval, Employee Management owns the employee record — so there is no cyclic *ownership*, even though the event handshake is two-way (request/acknowledge).
 
 ---
 
@@ -596,8 +594,8 @@ No circular dependency; flow is unidirectional.
 | Module | Reference | Reason |
 |--------|-----------|--------|
 | Employee Management | §10 (hire approval creates employee) | Onboarding requests EM to create Inactive employee record |
-| Documents | §7 (work-permit requirement) | Documents module owns document storage and validation |
-| Contracts | §9 (contract template, QES signing) | Contracts module owns contract versioning and signature |
+| Documents | §7 (work-permit requirement) | Documents module owns document storage, expiry, and the non-EU work-permit requirement/validation |
+| Contracts | §9 (contract template, QES signing) | Contracts module owns contract template, versioning, storage, and QES signing |
 | Compliance | §13–14, §25–27 (GDPR, audit, retention) | Compliance owns retention policy, consent, special-category handling |
 | Authentication | §9, §5 (login, MFA for managers) | Auth module owns account creation and session management |
 | Hotels | §5, §9, §10 (Hotel Group scope) | Hotels module owns Hotel and Hotel Group records |
