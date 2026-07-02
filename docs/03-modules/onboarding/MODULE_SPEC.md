@@ -41,13 +41,13 @@ To provide a legally compliant, documented, and auditable new-hire workflow that
 In scope for this module:
 
 - **Personalfragebogen (new-hire form):** a self-service digital form with all confirmed German onboarding fields (CRR §6).
-- **Document collection and validation:** capturing required documents from workers; geofencing work-permit requirements to non-EU/EEA/Swiss workers (CRR §7).
+- **Document collection and orchestration:** capturing required documents from workers and orchestrating the collection workflow; geofencing work-permit requirements to non-EU/EEA/Swiss workers (document validation itself is owned by the Documents module) (CRR §7).
 - **Chatbot-guided document collection:** an AI agent using the Claude API to query workers for missing documents with cost controls and fallback to static UI (CRR §8).
 - **Contract delivery and QES signing:** presenting the employment contract and capturing its signature via a QES provider (CRR §9; PDD §5.2, §7.1).
 - **Pool/claim hiring review:** a shared inbox mechanism where managers claim applications, review materials, and approve/reject new hires (CRR §10).
 - **Hire approval decisioning:** manager judgment on probation suitability and contract approval — entirely manual, no rating thresholds or automation (CRR §10).
 - **Onboarding progression & completion signal:** advancing the pre-existing (Inactive) employee record through the onboarding workflow and signalling completion so Employee Management transitions it to Under Review; relaying the approval/rejection decision (CRR §10; EM §7, §14).
-- **Rejection handling:** capturing and communicating rejection decisions; no re-application mechanics (CRR §10; [OPEN] rework flow — see §26 OPQ-4).
+- **Rejection handling:** capturing and communicating rejection decisions; no re-application mechanics (CRR §10; [OPEN] rework flow — see §20 OPQ-4).
 
 ## 4. Out of Scope
 
@@ -65,7 +65,7 @@ Owned by other modules and **referenced, never redefined** here:
 - **Document storage, expiry tracking, and the non-EU work-permit requirement** (including validation of work-permit documents) — Documents module (CRR §7; EM §4).
 - **Contract template ownership, version control, storage, and QES signing** — Contracts module (CRR §9; EM §4).
 - **QES provider integration and signature capture** — Contracts module (CRR §9; PDD §5.2, §7.1).
-- **Chatbot user data and GDPR subject-rights exports** — the chatbot is reused for subject-rights requests; Compliance module owns the subject-rights workflow and data provision (CRR §8, §26; [OPEN] event contract — see §26 OPQ-3).
+- **Chatbot user data and GDPR subject-rights exports** — the chatbot is reused for subject-rights requests; Compliance module owns the subject-rights workflow and data provision (CRR §8, §26; [OPEN] event contract — see §20 OPQ-3).
 - **Special-category data handling, retention tiers, and policy enforcement** — Compliance module (CRR §25–§27; PDD §5.4, §5.7).
 - **Three-tier automatic deletion jobs** — Retention module (CRR §25).
 - **Push notification delivery** — Notifications module (CRR §18).
@@ -157,7 +157,7 @@ The module is responsible for:
   - Cached required-document list to reduce repeated API calls.
   - Graceful fallback to a static checklist UI if token limits are exceeded.
 - **Secondary use:** The same agent is reused for GDPR subject-rights requests (owned by Compliance module) (CRR §8, §26).
-- **Conversation state:** [OPEN] whether conversation history is persisted for the worker, or discarded after onboarding completion (see §26 OPQ-3).
+- **Conversation state:** [OPEN] whether conversation history is persisted for the worker, or discarded after onboarding completion (see §20 OPQ-3).
 
 ### 6.4 Employment Contract & QES
 
@@ -199,7 +199,7 @@ The module is responsible for:
 - **Suitability assessment:** The manager marks a worker as "suitable" (approve) or rejects them.
 - **Probation judgment:** entirely manual manager judgment — no system timer, no rating-threshold automation, no probation clock.
 - **Scope of review:** Manager has full access to the Personalfragebogen, uploaded documents, and signed contract.
-- **No re-application:** [OPEN] how rejected applicants are handled; whether they can reapply (see §26 OPQ-4).
+- **No re-application:** [OPEN] how rejected applicants are handled; whether they can reapply (see §20 OPQ-4).
 
 ## 7. Onboarding Lifecycle
 
@@ -292,7 +292,7 @@ Onboarding produces the following events for consumption by other modules:
    - Payload: Application ID, Worker ID, Manager ID, rejection reason (optional), timestamp.
    - Consumers: Employee Management module (transitions employee Under Review → Rejected, EM §14), Notifications (worker notification), Audit.
 
-**Event contract** [OPEN]: Whether events are transactional (exactly-once) or best-effort; retry/idempotency semantics (see §26 OPQ-3).
+**Event contract** [OPEN]: Whether events are transactional (exactly-once) or best-effort; retry/idempotency semantics (see §20 OPQ-3).
 
 ## 11. Events Consumed
 
@@ -302,15 +302,15 @@ Onboarding consumes events from other modules:
    - Expected at the start of onboarding, immediately following signup.
    - Action: Onboarding associates its workflow with this existing Inactive employee record and begins document collection.
 
-**[OPEN] Document validation events** (from Documents module) — whether Documents module publishes validation status (CRR §7; coordination required — see §26 OPQ-2).
+**[OPEN] Document validation events** (from Documents module) — whether Documents module publishes validation status (CRR §7; coordination required — see §20 OPQ-2).
 
 ## 12. Security
 
-**Data classification:** Personalfragebogen and document data are **sensitive** — subject to special-category protection under GDPR (§27).
+**Data classification:** Personalfragebogen and document data are **sensitive personal data** requiring protection; special-category protection under GDPR applies to the CRR §27 fields (Konfession, disability, health) (CRR §27).
 
 **Transmission:**
-- Document uploads: HTTPS with TLS 1.2 or higher.
-- Chatbot conversations: encrypted end-to-end between worker and Claude API (via HTTPS).
+- Document uploads: transmitted over TLS (HTTPS) in transit, terminated at the platform edge (PDD §5.2).
+- Chatbot conversations: transmitted over TLS (HTTPS) in transit; not end-to-end encrypted (PDD §5.2).
 
 **Chatbot input validation:** Worker input is validated to reject:
 - SQL injection attempts.
@@ -325,15 +325,15 @@ Onboarding consumes events from other modules:
 
 ## 13. GDPR & Data Protection
 
-**Personalfragebogen fields:** All Personalfragebogen fields are classified as **special-category data** (or closely adjacent) due to:
+**Personalfragebogen fields:** All Personalfragebogen fields are **personal data** that is sensitive and must be protected; however, per CRR §27 and EM §9, the ordinary Personalfragebogen fields are **ordinary personal data, not GDPR special-category data**. Field-by-field sensitivity:
 
-- Nationality, place of birth, date of birth: identity markers.
-- Tax ID, Social Security Number: quasi-identifiers.
-- Bank account (IBAN, account holder): financial special-category (not GDPR special-category per se, but financial data).
-- Health insurance provider: implies health status / special-category proximity.
-- Konfession (religion): explicitly special-category (only if collected — confirm if included in §6.1 fields; not listed but flagged in CRR §27).
+- Nationality, place of birth, date of birth: identity markers (ordinary personal data).
+- Tax ID, Social Security Number: quasi-identifiers (ordinary personal data).
+- Bank account (IBAN, account holder): **financial/payroll data** — not GDPR special-category.
+- Health insurance provider (Krankenkasse): personal data — the insurer name is not itself a health record and is not GDPR special-category.
+- **GDPR special-category data** is restricted to the CRR §27 set only: **Konfession (religion), disability status, and health data (sick notes)**. Konfession is **NOT** part of the confirmed §6.1 Personalfragebogen field list (not collected on this form; flagged in CRR §27).
 
-**Retention:** Personalfragebogen data falls under **Tier 2 (Payroll-adjacent): 6 years** per German tax/payroll retention law (§41 EStG / §257 HGB / §147 AO) (CRR §25; [OPEN] tax-advisor sign-off — OPQ-1).
+**Retention:** Personalfragebogen data **spans two retention tiers** (CRR §25; EM §19). General personal/profile fields (name, date of birth, nationality, address, etc.) fall under **Tier 2 (general personal/profile data): 5 years**, while payroll/tax-adjacent fields (IBAN, Tax ID) fall under **Tier 3 (payroll/tax-adjacent fields): 6 years** per German tax/payroll retention law (§41 EStG / §257 HGB / §147 AO) ([OPEN] tax-advisor sign-off — OPQ-1).
 
 **Subject-rights:** Workers can request data export via button or chatbot (§6.3); Compliance module owns fulfilment, coordinating with Onboarding to retrieve Personalfragebogen and documents (CRR §26).
 
