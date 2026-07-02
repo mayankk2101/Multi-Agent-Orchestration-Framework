@@ -71,7 +71,7 @@ Owned by other modules and **referenced, never redefined** here (Rule 5):
 - **The platform account/role/scope object itself and the RBAC framework** — User Management / Authorization (CRR §1; PDD §5.4).
 - **Onboarding orchestration:** the Personalfragebogen self-service form, the document-collection chatbot, and the pool/claim hire-approval mechanism — Onboarding module (CRR §6, §8, §10).
 - **Document storage, expiry tracking, and the non-EU work-permit requirement** — Documents module (CRR §4, §7).
-- **Contract storage and QES signing** — Contracts module (CRR §9).
+- **Contract storage and the manager-confirmed hand-signed contract** — Contracts module (CRR §9).
 - **Weekly calendar, direct scheduling, and sick/vacation marking** — Calendar/Scheduling module (CRR §13, §22).
 - **Broadcast job requests, direct assignment, skill-based eligibility computation, and daily assignment exclusivity enforcement** — Job Dispatch module (CRR §13).
 - **Quality scoring, rating computation, rating tiers, recency weighting, warnings, and the rework flow** — Quality module (CRR §14, §15, §16).
@@ -129,7 +129,7 @@ The employee lifecycle is the employee-level view of the journey from account cr
 2. **Onboarding in progress.** The onboarding workflow (Personalfragebogen, document collection, chatbot, contract) is owned and executed by the **Onboarding module** (see Onboarding module specification). This module's only concern is that the record remains **Inactive** for the duration of that workflow (CRR §6, §7, §8, §9).
 3. **Under review.** Once the Onboarding module signals that its workflow is complete, the record moves to **Under Review**, pending a hire-approval decision. The pool/claim review mechanism itself is owned by the **Onboarding module** (see Onboarding module specification) (CRR §10).
 4. **Active (approved) / Rejected.** The Onboarding module's review decision (approve/reject) drives this module's transition to **Active** or **Rejected** (CRR §10).
-5. **Probationary period.** Active employees serve a probationary period; a manual "suitable" marking is recorded against the employee record (no system timer, no rating-threshold automation). The precise employment/contract semantics of probation depend on an unresolved legal question (see [OPEN] in §26) (CRR §6, §9, §10).
+5. **Probationary period.** Active employees serve a probationary period; a manual "suitable" marking is recorded against the employee record (no system timer, no rating-threshold automation). The confirmed employment/contract shape is a **fixed-term one-year contract with a six-month probation clause, signed by hand** (contract mechanics owned by the Contracts module; resolved — see §26 OPQ-1) (CRR §6, §9, §10).
 6. **Deactivated.** The platform retains soft-deletion of the account/record, so an employee record can be deactivated without destroying operational history. The **triggering offboarding/termination workflow is not defined** in the authoritative documents (see [OPEN] in §26) (PDD §9.1; CRR §30).
 
 ## 8. Employee Status Model
@@ -144,7 +144,7 @@ The confirmed employee-level statuses, each grounded in the authoritative docume
 
 Additional notes:
 
-- **Probation is a milestone, not an automated status.** "Suitable" is a manual manager marking; there is no system timer or automatic transition (CRR §10). Whether probation constitutes a *distinct* status depends on the [OPEN] probation legal shape (§26).
+- **Probation is a milestone, not an automated status.** "Suitable" is a manual manager marking; there is no system timer or automatic transition (CRR §10). The now-resolved probation legal shape — a fixed-term one-year contract with a six-month probation clause, signed by hand — does **not** introduce a distinct probation status; suitability remains a manual manager marking (resolved — see §26 OPQ-1) (CRR §9, §10).
 - **Rating tiers (Elite / High / Standard / Low / Probation) are NOT employee statuses.** They are display labels owned by the Quality module, layered on the 0–100 rating, and must not be conflated with lifecycle status (CRR §15).
 - **No suspension status exists.** Warnings explicitly trigger no auto-suspension and no automated consequence beyond manager notification (CRR §16).
 - **No account lockout** exists as a status either (CRR §2).
@@ -250,7 +250,7 @@ Employee-status transitions owned by this module. Each transition is audit-logge
 - **Inactive → Under Review** — triggered by the Onboarding module signalling workflow completion (see Onboarding module specification) (CRR §8, §10).
 - **Under Review → Active** — triggered by the Onboarding module's approval decision (see Onboarding module specification) (CRR §10).
 - **Under Review → Rejected** — triggered by the Onboarding module's rejection decision (see Onboarding module specification) (CRR §10).
-- **Active → Active (marked suitable)** — manager manually confirms probation suitability; not an automated transition (CRR §10). Whether this is a *distinct* status is [OPEN] (§26).
+- **Active → Active (marked suitable)** — manager manually confirms probation suitability; not an automated transition (CRR §10). This is **not** a distinct status: the resolved probation shape (fixed-term one-year contract, six-month probation clause, hand-signed) adds no separate status (resolved — see §26 OPQ-1).
 - **Active → Deactivated** — soft-deletion of the record; **triggering workflow is [OPEN]** (PDD §9.1; §26).
 
 Constraints:
@@ -388,7 +388,7 @@ This module reacts to events owned elsewhere in order to keep the profile, avail
 - **Authentication / User Management** — account, role, scope, MFA, sessions (CRR §1, §2; PDD §5.3).
 - **Onboarding** — Personalfragebogen, document-collection chatbot, pool/claim hire-approval (CRR §6, §8, §10).
 - **Documents** — document storage, expiry, non-EU work-permit (CRR §4, §7).
-- **Contracts** — contract storage and QES signing (CRR §9).
+- **Contracts** — contract storage and the manager-confirmed hand-signed contract (CRR §9).
 - **Calendar/Scheduling** — weekly plan, sick/vacation (availability inputs) (CRR §13, §22).
 - **Job Dispatch** — broadcast, direct assignment, skill eligibility, daily exclusivity (availability inputs) (CRR §13).
 - **Quality** — scores, ratings, tiers, warnings, rework (profile inputs) (CRR §14–§16).
@@ -405,17 +405,17 @@ This module reacts to events owned elsewhere in order to keep the profile, avail
 - **Scaling hotels and groups:** the design anticipates new hotels added over time; employee-to-group association and search/filter by hotel must scale accordingly (CRR §11, §21).
 - **Compliance extension:** the compliance surface is to be **extended** (not rebuilt) when the client's fuller compliance requirements arrive (CRR §33).
 - **Post-probation contract divergence:** today one contract document serves both signup and post-probation; if it must differ later, that is a future change (CRR §9).
-- **Contract expiry/renewal:** the contract will expire after a period to be defined; once the length is known, expiry handling attaches to the employee/contract relationship ([OPEN] length, §26) (CRR §9).
+- **Contract expiry/renewal:** the confirmed contract lifecycle is **one year initial, extendable by one additional year, and permanent (open-ended) after two years**; expiry handling attaches to the employee/contract relationship accordingly (resolved — see §26 OPQ-2) (CRR §9).
 - **Per-hotel configurable geofence radius** is anticipated later (attendance-owned; noted for platform consistency) (CRR §17).
 - The retained employment record is intended to accommodate future scheduling expansion **without restructuring** (PDD §9.5).
 
 ## 26. Open Questions
 
-Genuine unresolved items. Items 1–3 are the three open product questions recorded in the authoritative register; items 4+ are gaps this module surfaces (Rule 7 — not resolved here).
+Items 1–3 are the three product questions previously recorded as open in the authoritative register; they are now **RESOLVED** in the CRR (Open Items) and their confirmed answers are recorded below (identifiers and positions retained to preserve cross-references). Items 4+ are genuine gaps this module surfaces (Rule 7 — not resolved here).
 
-- **[OPEN] OPQ-1 — Probation legal shape.** Fixed-term trial contract vs. permanent contract with a probation clause. Determines whether QES is mandatory from day one and whether probation is a distinct employee status (CRR §9, Open Items).
-- **[OPEN] OPQ-2 — Contract expiry length.** The contract expires, but the duration is pending; blocks any contract-expiry handling on the employee record (CRR §9, Open Items).
-- **[OPEN] OPQ-3 — Hotel-creation permission.** Admin-only vs. Regional Manager may add hotels to their own group; affects governance of employee-to-hotel/group context (CRR §11, Open Items).
+- **[RESOLVED] OPQ-1 — Probation legal shape.** Confirmed: the initial contract is a **fixed-term one-year contract with a six-month probation clause, signed by handwritten signature** (contracts are signed by hand; there is no e-signature). Probation remains a **manual manager marking** and is not a distinct automated employee status (CRR §9, Open Items).
+- **[RESOLVED] OPQ-2 — Contract expiry length.** Confirmed: **one year initial, extendable by one additional year, and permanent (open-ended) after two years** of successful employment (CRR §9, Open Items).
+- **[RESOLVED] OPQ-3 — Hotel-creation permission.** Confirmed: new hotels may be created by **Admin/HQ only**; Regional/Property Managers may not create hotels or modify hotel groups (CRR §11, Open Items).
 - **[OPEN] OPQ-4 — Offboarding/termination workflow.** Soft-deletion is retained, but no triggering termination/deactivation or re-engagement workflow is defined (PDD §9.1; CRR §30).
 - **[OPEN] OPQ-5 — Hotel-Group association mechanism.** Workers may be assigned only within the group they are working in, but how a worker becomes associated with a group is not specified (CRR §12).
 - **[OPEN] OPQ-6 — Staff self-edit after onboarding.** Only signup-time self-entry of the Personalfragebogen is confirmed; post-activation self-edit rights are unspecified (CRR §6).
