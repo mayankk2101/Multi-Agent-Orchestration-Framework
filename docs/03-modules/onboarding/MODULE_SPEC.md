@@ -24,7 +24,7 @@ The Onboarding Module is the system responsible for **new-hire intake, document 
 
 The module is customer-facing for workers (self-service signup, Personalfragebogen form, document upload chatbot, contract e-signature) and manager-facing for hiring decisioning (pool/claim review mechanism, approve/reject).
 
-Onboarding produces two critical outputs: (1) a **completed employee hire**, reflected as a new Inactive employee record in the Employee Management module, and (2) a **manager decision** (approve/reject) that transitions the employee toward Active or Rejected status (CRR §6–§10; EM §7–§8).
+Onboarding produces two critical outputs: (1) a **completed onboarding** for the employee — the Employee-Management-owned employee record (created **Inactive** at signup) is progressed through the onboarding workflow and signalled complete, so Employee Management moves it to **Under Review**; and (2) a **manager decision** (approve/reject) that Employee Management uses to transition the employee to **Active** or **Rejected** (CRR §6–§10; EM §7–§8). Onboarding does **not** create the employee record — Employee Management owns employee creation and all lifecycle transitions (EM §7, §14).
 
 ## 2. Purpose
 
@@ -46,7 +46,7 @@ In scope for this module:
 - **Contract delivery and QES signing:** presenting the employment contract and capturing its signature via a QES provider (CRR §9; PDD §5.2, §7.1).
 - **Pool/claim hiring review:** a shared inbox mechanism where managers claim applications, review materials, and approve/reject new hires (CRR §10).
 - **Hire approval decisioning:** manager judgment on probation suitability and contract approval — entirely manual, no rating thresholds or automation (CRR §10).
-- **Employment record creation:** once approved, provisioning a new Inactive employee record in Employee Management (CRR §10; EM Module §7).
+- **Onboarding progression & completion signal:** advancing the pre-existing (Inactive) employee record through the onboarding workflow and signalling completion so Employee Management transitions it to Under Review; relaying the approval/rejection decision (CRR §10; EM §7, §14).
 - **Rejection handling:** capturing and communicating rejection decisions; no re-application mechanics (CRR §10; [OPEN] rework flow — see §26 OPQ-4).
 
 ## 4. Out of Scope
@@ -89,7 +89,7 @@ The module is responsible for:
 6. **Account activation gate:** blocking account activation until all required documents are uploaded AND contract is signed (CRR §8).
 7. **Pool/claim mechanism:** managing a shared inbox of pending applications visible to all Hotel Group managers; supporting claiming, locking, and preventing simultaneous review (CRR §10).
 8. **Hire approval:** capturing manager decisions (approve/reject) and probation suitability assessment (CRR §10).
-9. **Employee record provisioning:** requesting Employee Management module to create a new Inactive employee record when hire is approved (CRR §10; EM Module §7).
+9. **Onboarding completion & decision relay:** signalling Employee Management when the onboarding workflow is complete (so it moves the existing Inactive record to Under Review) and relaying the manager's approval/rejection decision; Employee Management owns the record and executes the transition (CRR §10; EM §7, §14).
 10. **Audit trail:** recording all onboarding steps, documents submitted, contract signature, and approval decisions for compliance and dispute resolution (CRR §26).
 
 ## 6. Core Concepts
@@ -205,18 +205,18 @@ The module is responsible for:
 
 The onboarding lifecycle progresses through the following states:
 
-1. **Signup initiated** — Worker creates platform account and enters signup flow.
+1. **Signup initiated** — Worker creates platform account; Employee Management creates the corresponding employee record in **Inactive** status (EM §7, §14). The worker enters the onboarding flow.
 2. **Personalfragebogen in progress** — Worker fills out the form.
 3. **Personalfragebogen completed** — Form submitted.
 4. **Document collection in progress** — Chatbot guides worker through required documents.
 5. **Documents collected** — All required documents uploaded (or worker exempted due to EU status).
 6. **Contract presented** — Contract template shown to worker.
 7. **Contract signed** — Worker has signed contract via QES; account is now activated.
-8. **Awaiting manager review** — Application appears in pool for manager claiming.
+8. **Awaiting manager review** — Onboarding signals completion; Employee Management transitions the employee record from **Inactive** to **Under Review** (EM §7, §14). The application appears in the pool for manager claiming.
 9. **Under manager review** — Manager has claimed the application and is reviewing.
-10. **Approved** — Manager approves; Employee Management module is requested to create Inactive employee record.
-11. **Rejected** — Manager rejects; worker is notified; application is archived.
-12. **Employee record created (Inactive)** — EM module confirms creation; onboarding is complete. The employee record then follows the Employee Management lifecycle (EM §7 Employee Lifecycle; §8 Employee Status Model).
+10. **Approved** — Manager approves; Employee Management transitions the employee record from **Under Review** to **Active** (EM §14).
+11. **Rejected** — Manager rejects; Employee Management transitions the employee record from **Under Review** to **Rejected** (EM §14); worker is notified; application is archived.
+12. **Onboarding complete** — For an approved hire, the employee record is now **Active** in Employee Management and Onboarding's involvement ends; the record continues under the Employee Management lifecycle thereafter (EM §7 Employee Lifecycle; §8 Employee Status Model).
 
 **Account activation gate:** States 1–7 result in an activated platform account. Account is **blocked** until state 7 is reached (CRR §8).
 
@@ -233,9 +233,11 @@ Documents collected → Contract presented
 Contract presented → Contract signed
 Contract signed → Awaiting manager review
 Awaiting manager review → Under manager review
-Under manager review → Approved → Employee record created (Inactive)
-Under manager review → Rejected
+Under manager review → Approved   (Employee Management: Under Review → Active)
+Under manager review → Rejected   (Employee Management: Under Review → Rejected)
 ```
+
+**Employee-status mapping (owned by Employee Management, EM §8/§14):** the employee record is created **Inactive** at *Signup initiated*; it becomes **Under Review** at *Awaiting manager review* (onboarding complete); **Active** on *Approved*; **Rejected** on *Rejected*. The states above are Onboarding **workflow** states only — Employee Management owns the employee statuses and their transitions.
 
 **No backwards transitions:** once a state is left, it cannot be re-entered within the same application.
 
@@ -276,7 +278,7 @@ Onboarding produces the following events for consumption by other modules:
 
 5. **`ApplicationReadyForReview`** — Completed application (Personalfragebogen + documents + contract signed) is now in the pool.
    - Payload: Application ID, Worker ID.
-   - Consumers: Notifications (manager notification), Pool/Claim system.
+   - Consumers: Employee Management module (transitions employee Inactive → Under Review, EM §14), Notifications (manager notification), Pool/Claim system.
 
 6. **`ApplicationClaimed`** — Manager has claimed the application for review.
    - Payload: Application ID, Manager ID.
@@ -284,11 +286,11 @@ Onboarding produces the following events for consumption by other modules:
 
 7. **`HireApproved`** — Manager has approved the hire.
    - Payload: Application ID, Worker ID, Manager ID, approval timestamp.
-   - Consumers: Employee Management module (request to create Inactive employee record), Notifications (worker notification).
+   - Consumers: Employee Management module (transitions employee Under Review → Active, EM §14), Notifications (worker notification).
 
 8. **`HireRejected`** — Manager has rejected the hire.
    - Payload: Application ID, Worker ID, Manager ID, rejection reason (optional), timestamp.
-   - Consumers: Notifications (worker notification), Audit.
+   - Consumers: Employee Management module (transitions employee Under Review → Rejected, EM §14), Notifications (worker notification), Audit.
 
 **Event contract** [OPEN]: Whether events are transactional (exactly-once) or best-effort; retry/idempotency semantics (see §26 OPQ-3).
 
@@ -296,9 +298,9 @@ Onboarding produces the following events for consumption by other modules:
 
 Onboarding consumes events from other modules:
 
-1. **`EmployeeRecordCreated`** (from Employee Management) — Confirms that an Inactive employee record has been provisioned for an approved hire.
-   - Expected after Onboarding publishes `HireApproved`.
-   - Action: Mark onboarding as complete; send final confirmation to worker and manager.
+1. **`EmployeeRecordCreated`** (from Employee Management) — Employee Management has created the employee record in **Inactive** status at signup (EM §7, §14).
+   - Expected at the start of onboarding, immediately following signup.
+   - Action: Onboarding associates its workflow with this existing Inactive employee record and begins document collection.
 
 **[OPEN] Document validation events** (from Documents module) — whether Documents module publishes validation status (CRR §7; coordination required — see §26 OPQ-2).
 
@@ -396,7 +398,7 @@ Every Onboarding action produces an audit log entry:
 ### 15.5 Approval Decision Validation
 
 - **Decision required:** Manager must select either "Approve" or "Reject"; cannot claim without deciding.
-- **Approval triggers:** Once approved, Employee Management module is called to create Inactive employee record.
+- **Approval triggers:** Once approved, Employee Management transitions the employee record from Under Review to Active (EM §14).
 - **Rejection captures:** Rejection reason is optional but recommended for documentation; rejection is final (no re-entry unless worker re-signups).
 
 ## 16. Error Scenarios & Recovery
@@ -454,9 +456,9 @@ A worker with Nationality = Austria, Poland, etc., is exempt from the work-permi
 
 Worker fills Personalfragebogen with Name = "Max Müller" but later uploads an ID showing Name = "Maxim Mueller". [OPEN] Whether system flags discrepancy or accepts both (OPQ-11).
 
-### 17.3 Manager Approves, Employee Management Rejects
+### 17.3 Manager Approves, Employee Management Cannot Activate
 
-[Hypothetical] Manager approves the hire; Employee Management module receives `HireApproved` event but rejects employee creation (e.g., duplicate employee ID). 
+[Hypothetical] Manager approves the hire; Employee Management receives the `HireApproved` event but cannot transition the employee from Under Review to Active (e.g., the record is in an unexpected state).
 
 **Behavior:** [OPEN] escalation and resolution path (OPQ-12).
 
@@ -469,7 +471,7 @@ Onboarding may contain a GDPR consent gate (e.g., data-processing consent for ch
 **Module dependencies** (modules Onboarding consumes):
 
 1. **Authentication:** Login, account creation, password reset, MFA (CRR §2).
-2. **Employee Management:** Creates Inactive employee records upon hire approval; confirms employee creation (CRR §10; EM Module §7).
+2. **Employee Management:** Owns the employee record and lifecycle — creates the Inactive record at signup and transitions it (Inactive → Under Review → Active/Rejected) in response to Onboarding's completion signal and approval/rejection decisions (CRR §6–§10; EM §7, §14).
 3. **Documents:** Stores uploaded documents; validates non-EU work-permit requirements (CRR §7).
 4. **Contracts:** Manages contract template, versioning, and storage (CRR §9).
 5. **Compliance:** Owns data retention, consent governance, and special-category handling; Onboarding defers to it (CRR §25–§27).
@@ -480,7 +482,7 @@ Onboarding may contain a GDPR consent gate (e.g., data-processing consent for ch
 
 **Outbound dependencies** (modules that consume Onboarding):
 
-1. **Employee Management:** Consumes `HireApproved` event; creates Inactive employee; publishes `EmployeeRecordCreated` (CRR §10; EM Module §7).
+1. **Employee Management:** Creates the Inactive employee record at signup (publishing `EmployeeRecordCreated`); consumes Onboarding's completion signal (`ApplicationReadyForReview`) and `HireApproved`/`HireRejected` to transition the record (Inactive → Under Review → Active/Rejected) (CRR §6–§10; EM §7, §14).
 2. **Audit/Compliance:** Consumes all onboarding events for audit and legal compliance.
 3. **Analytics:** Consumes `OnboardingStarted`, `HireApproved`, `HireRejected` for hiring metrics.
 
@@ -559,9 +561,9 @@ The following genuine unknowns are unresolved and will block final implementatio
 - Manual review flag?
 - Impacts: Data quality; manager review burden.
 
-**OPQ-12: Employee Management record-creation failure**
-- Manager approves hire; Employee Management module fails to create employee record (e.g., duplicate employee ID).
-- What is the recovery path? Does Onboarding mark as "Pending Employee Creation" and retry?
+**OPQ-12: Employee Management activation-transition failure**
+- Manager approves hire; Employee Management fails to transition the employee from Under Review to Active (e.g., the record is in an unexpected state).
+- What is the recovery path? Does Onboarding mark the application as "Pending Activation" and retry the signal?
 - Is manager / worker notified of the failure?
 - Impacts: Data consistency; error handling.
 
@@ -580,12 +582,12 @@ The following genuine unknowns are unresolved and will block final implementatio
 
 **Relationship to Employee Management module:**
 
-Onboarding **feeds into** Employee Management via the `HireApproved` → `EmployeeRecordCreated` flow (EM Module §7). Onboarding does NOT duplicate EM responsibilities:
+Onboarding progresses the Employee-Management-owned employee record (created **Inactive** at signup) and drives its EM-owned lifecycle transitions by signalling onboarding completion (Inactive → Under Review) and relaying the approval/rejection decision (Under Review → Active/Rejected) (EM §7, §14). Onboarding does NOT duplicate EM responsibilities:
 
 - EM owns employee records, lifecycle states, and field definitions.
 - Onboarding owns intake, documents, contract, and hire-approval decisioning.
 
-The hire flow is conceptually forward (Onboarding → Employee Management), but the runtime event exchange is **bidirectional**: Onboarding emits `HireApproved` and consumes Employee Management's `EmployeeRecordCreated` acknowledgement (§11). Ownership is non-overlapping — Onboarding owns intake/approval, Employee Management owns the employee record — so there is no cyclic *ownership*, even though the event handshake is two-way (request/acknowledge).
+The runtime event exchange is **bidirectional**: Employee Management publishes `EmployeeRecordCreated` at signup, which Onboarding consumes to attach its workflow (§11); Onboarding in turn emits its completion signal and `HireApproved`/`HireRejected`, which Employee Management consumes to transition the record. Ownership is non-overlapping — Onboarding owns intake/approval, Employee Management owns the employee record and every lifecycle transition — so there is no cyclic *ownership*, even though the event handshake is two-way.
 
 ---
 
@@ -593,7 +595,7 @@ The hire flow is conceptually forward (Onboarding → Employee Management), but 
 
 | Module | Reference | Reason |
 |--------|-----------|--------|
-| Employee Management | §10 (hire approval creates employee) | Onboarding requests EM to create Inactive employee record |
+| Employee Management | §6–§10 (employee lifecycle) | EM owns the employee record (created Inactive at signup) and all lifecycle transitions; Onboarding progresses it and relays approval/rejection |
 | Documents | §7 (work-permit requirement) | Documents module owns document storage, expiry, and the non-EU work-permit requirement/validation |
 | Contracts | §9 (contract template, QES signing) | Contracts module owns contract template, versioning, storage, and QES signing |
 | Compliance | §13–14, §25–27 (GDPR, audit, retention) | Compliance owns retention policy, consent, special-category handling |
