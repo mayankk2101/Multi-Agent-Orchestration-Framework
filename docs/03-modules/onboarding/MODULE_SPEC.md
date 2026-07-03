@@ -22,7 +22,7 @@ No behaviour in this document is derived from any other source.
 
 The Onboarding Module is the system responsible for **new-hire intake, document collection, legal contract execution, and hire approval decisioning**. It orchestrates the journey from first signup through manager approval to the point where the employee becomes active in Employee Management.
 
-The module is customer-facing for workers (self-service signup, Personalfragebogen form, document upload chatbot, contract e-signature) and manager-facing for hiring decisioning (pool/claim review mechanism, approve/reject).
+The module is customer-facing for workers (self-service signup, Personalfragebogen form, document upload chatbot, contract download/print for hand signing) and manager-facing for hiring decisioning (contract-scan upload and confirmation, pool/claim review mechanism, approve/reject).
 
 Onboarding produces two critical outputs: (1) a **completed onboarding** for the employee — the Employee-Management-owned employee record (created **Inactive** at signup) is progressed through the onboarding workflow and signalled complete, so Employee Management moves it to **Under Review**; and (2) a **manager decision** (approve/reject) that Employee Management uses to transition the employee to **Active** or **Rejected** (CRR §6–§10; EM §7–§8). Onboarding does **not** create the employee record — Employee Management owns employee creation and all lifecycle transitions (EM §7, §14).
 
@@ -32,7 +32,7 @@ To provide a legally compliant, documented, and auditable new-hire workflow that
 
 - Captures the **Personalfragebogen** (German onboarding form) during self-service signup, so workers register with German authorities during probation (CRR §6).
 - Collects all **required documents and work permits** with AI-guided assistance, ensuring compliance with work-permit regulations for non-EU workers (CRR §7, §8).
-- Delivers and captures the **contract with QES (Qualified Electronic Signature)** to establish a legally binding fixed-term employment relationship (CRR §9; PDD §5.2, §7.1).
+- Generates the **pre-filled contract PDF** for download/print, and captures the **manager-confirmed hand-signed contract** (both parties sign on paper, in person; the scan is uploaded and the manager marks it signed & valid) to establish a legally binding fixed-term employment relationship (CRR §9; PDD §7.1).
 - Implements a **pool/claim hiring-approval mechanism** so managers can review, claim, and decide on new hires without duplicate simultaneous review (CRR §10).
 - Routes hiring decisions to the Employee Management module, which reflects the outcome in employee lifecycle state (CRR §10; EM Module §7).
 
@@ -43,7 +43,7 @@ In scope for this module:
 - **Personalfragebogen (new-hire form):** a self-service digital form with all confirmed German onboarding fields (CRR §6).
 - **Document collection and orchestration:** capturing required documents from workers and orchestrating the collection workflow; geofencing work-permit requirements to non-EU/EEA/Swiss workers (document validation itself is owned by the Documents module) (CRR §7).
 - **Chatbot-guided document collection:** an AI agent using the Claude API to query workers for missing documents with cost controls and fallback to static UI (CRR §8).
-- **Contract delivery and QES signing:** presenting the employment contract and capturing its signature via a QES provider (CRR §9; PDD §5.2, §7.1).
+- **Contract delivery and hand-signing capture:** generating the pre-filled contract PDF for download/print, then capturing the manager-confirmed hand-signed contract (the signed paper scan is uploaded and the manager marks it signed & valid) (CRR §9; PDD §7.1).
 - **Pool/claim hiring review:** a shared inbox mechanism where managers claim applications, review materials, and approve/reject new hires (CRR §10).
 - **Hire approval decisioning:** manager judgment on probation suitability and contract approval — entirely manual, no rating thresholds or automation (CRR §10).
 - **Onboarding progression & completion signal:** advancing the pre-existing (Inactive) employee record through the onboarding workflow and signalling completion so Employee Management transitions it to Under Review; relaying the approval/rejection decision (CRR §10; EM §7, §14).
@@ -63,8 +63,8 @@ Owned by other modules and **referenced, never redefined** here:
 - **Employee record creation and employee lifecycle state transitions** — Employee Management module; Onboarding requests state changes that EM executes (CRR §6–§10; EM §7).
 - **Skills, job titles, and other core employee profile fields** — Employee Management module (EM §9 Employee Profile, §10 Skills).
 - **Document storage, expiry tracking, and the non-EU work-permit requirement** (including validation of work-permit documents) — Documents module (CRR §7; EM §4).
-- **Contract template ownership, version control, storage, and QES signing** — Contracts module (CRR §9; EM §4).
-- **QES provider integration and signature capture** — Contracts module (CRR §9; PDD §5.2, §7.1).
+- **Contract template ownership, version control, and storage of the manager-confirmed hand-signed contract** — Contracts module (CRR §9; EM §4).
+- **Storage of the scanned signed contract in S3 (EU) and the ongoing contract lifecycle (expiry/renewal/permanent) and expiry reminders** — Contracts/HR module (CRR §9; PDD §5.7, §7.7).
 - **Chatbot user data and GDPR subject-rights exports** — the chatbot is reused for subject-rights requests; Compliance module owns the subject-rights workflow and data provision (CRR §8, §26; [OPEN] event contract — see §20 OPQ-3).
 - **Special-category data handling, retention tiers, and policy enforcement** — Compliance module (CRR §25–§27; PDD §5.4, §5.7).
 - **Three-tier automatic deletion jobs** — Retention module (CRR §25).
@@ -84,13 +84,13 @@ The module is responsible for:
 1. **Personalfragebogen capture:** providing a self-service digital form with all confirmed fields, presented during initial signup (CRR §6).
 2. **Document collection orchestration:** determining which documents are required based on worker nationality/residency status; requesting them via chatbot and fallback UI (CRR §7, §8).
 3. **Chatbot execution:** running an AI-guided conversation with cost controls, caching, token limits, and graceful fallback (CRR §8; PDD §4.14, §7.1).
-4. **Contract presentation:** delivering the employment contract template and coordinating with Contracts module on QES signing (CRR §9).
-5. **QES coordination:** requesting Qualified Electronic Signature from the chosen provider (Skribble recommended) and capturing the signed contract (CRR §9; PDD §5.2, §7.1).
-6. **Account activation gate:** blocking account activation until all required documents are uploaded AND contract is signed (CRR §8).
+4. **Contract generation & presentation:** generating a pre-filled contract PDF from Personalfragebogen data (incl. the 1-year fixed term and 6-month probation clause) and making it available to download/print for hand signing (CRR §9; PDD §7.1).
+5. **Hand-signed contract capture:** accepting the scanned/photographed signed paper contract (stored in S3 (EU)) and recording the manager's confirmation that it is "signed & valid"; the system does not capture, verify, or auto-detect the signature (CRR §9; PDD §5.7, §7.1).
+6. **Account activation gate:** blocking account activation until all required documents are uploaded AND a contract file is uploaded AND the manager marks it signed & valid; a visible "contract pending signature" status exists until then (CRR §8, §9).
 7. **Pool/claim mechanism:** managing a shared inbox of pending applications visible to all Hotel Group managers; supporting claiming, locking, and preventing simultaneous review (CRR §10).
 8. **Hire approval:** capturing manager decisions (approve/reject) and probation suitability assessment (CRR §10).
 9. **Onboarding completion & decision relay:** signalling Employee Management when the onboarding workflow is complete (so it moves the existing Inactive record to Under Review) and relaying the manager's approval/rejection decision; Employee Management owns the record and executes the transition (CRR §10; EM §7, §14).
-10. **Audit trail:** recording all onboarding steps, documents submitted, contract signature, and approval decisions for compliance and dispute resolution (CRR §26).
+10. **Audit trail:** recording all onboarding steps, documents submitted, contract signed & valid confirmation, and approval decisions for compliance and dispute resolution (CRR §30).
 
 ## 6. Core Concepts
 
@@ -159,26 +159,42 @@ The module is responsible for:
 - **Secondary use:** The same agent is reused for GDPR subject-rights requests (owned by Compliance module) (CRR §8, §26).
 - **Conversation state:** [OPEN] whether conversation history is persisted for the worker, or discarded after onboarding completion (see §20 OPQ-3).
 
-### 6.4 Employment Contract & QES
+### 6.4 Familiarization Period (Trial Work)
 
-**Definition:** A fixed-term employment contract signed with Qualified Electronic Signature (QES), establishing a legally binding employment relationship.
+**Definition:** An optional short trial-work period that may take place after a complete application (Personalfragebogen + valid documents) and **before** an employment contract is concluded, so both parties can determine whether the working relationship is suitable.
 
-**Specifications** (CRR §9; PDD §5.2, §7.1):
+**Rules** (CRR §9):
+
+- Occurs only after the applicant has submitted a **complete application with all required and valid documents**.
+- **Maximum of two trial days**, and always complies with applicable legal requirements.
+- **Sole purpose:** mutual suitability assessment — it is not itself the hiring decision and carries no automation.
+- An employment contract is **concluded only if both parties agree to proceed** after the familiarization period.
+- Typically the hand signing of the contract happens on-site during these familiarization days, since the worker is present in person (§6.5).
+
+### 6.5 Employment Contract (Hand-Signed, Manager-Confirmed)
+
+**Definition:** A fixed-term employment contract signed **by hand** (physical/handwritten, wet-ink) and confirmed by the manager — the **manager-confirmed hand-signed contract** (EM §4). There is **no e-signature integration**; QES is explicitly rejected (CRR §9, §34).
+
+**Specifications** (CRR §9; PDD §7.1, §5.7):
 
 - The contract is the **same document** used at signup and after probation (one document, not two). If differences are needed in future, they are introduced later through a separate process.
-- Contract is shown to the worker so they can review and sign.
-- Signature method: **Qualified Electronic Signature (QES)**, not simple e-signature.
-- **Why QES is mandatory:** Fixed-term employment contracts in Germany (§14(4) TzBfG) **require QES** to establish the fixed term; a simple e-signature would invalidate the fixed-term clause.
-- **QES provider:** Skribble recommended (native QES, EU/German hosting, API-embeddable); alternatives: Yousign, sproof.
-- **Contract ownership:** Contract template, versioning, storage, and QES signing are owned by the **Contracts module** (EM §4); Onboarding coordinates presentation and signature capture.
-- **Account activation gate:** The account does NOT activate until the contract is signed (CRR §8).
+- **Generation:** The system generates a **pre-filled contract PDF** from the worker's Personalfragebogen data (name, start date, the **1-year fixed term**, the **6-month probation clause**, etc.).
+- **Download/print:** The pre-filled contract is made available to **download/print** and is shown to the worker to review.
+- **Hand signing:** **Both parties sign on paper, in person** (typically during the familiarization days, §6.4). The system does NOT capture, verify, or auto-detect the handwritten signature.
+- **Scan upload:** The signed paper contract is **scanned/photographed and uploaded** back into the app (mechanically like any other document upload) and stored in **S3 (EU)**.
+- **Manager confirmation (Option A):** The **manager uploads the scan and marks it "signed contract received & valid."** The system **trusts the manager's confirmation**. This action activates the account and starts the 1-year expiry clock.
+- **Legal note:** A **handwritten (wet-ink) signature satisfies the German written-form requirement** for the contract; QES / eIDAS electronic-signature law does not apply here.
+- **Contract ownership:** Contract template, versioning, and storage of the manager-confirmed hand-signed contract (scan in S3 (EU)) are owned by the **Contracts module** (EM §4); Onboarding coordinates generation, presentation, scan upload, and captures the manager's confirmation.
+- **Account activation gate:** The account does NOT activate until a contract file is **uploaded** AND the **manager marks it signed & valid** (CRR §8, §9). Until then a visible **"contract pending signature"** status exists so unsigned contracts are not forgotten.
 
-**Open questions** (CRR §9):
+**Contract lifecycle** (CRR §9): The initial contract is a **fixed-term 1-year contract with a 6-month probation period**; during probation either party may terminate with **two weeks' notice**. The **ongoing** lifecycle — the contract expires at the end of year 1, may be **extended by one additional year (no new probation)**, and after **two years** the employee is offered a **permanent (open-ended) contract** — together with **contract-expiry reminders** (manager reminded before the 1-year expiry, again before the end of a second year, and no further reminders once permanent) is owned by the **Contracts/HR module** (PDD §5.6, §7.7). Onboarding owns only the **initial signing and activation** and references the ongoing lifecycle; it does not duplicate that ownership.
 
-- [OPEN] **Probation legal shape:** fixed-term trial contract vs. permanent contract with probation clause. This determines whether QES is mandatory from day one. Client: "to be answered later" (OPQ-6).
-- [OPEN] **Contract expiry/renewal length:** client confirmed the contract WILL expire but the duration is "will tell you later" (OPQ-7).
+**Resolved questions** (CRR §9):
 
-### 6.5 Pool/Claim Hiring Mechanism
+- **[RESOLVED]** **Probation legal shape:** a **fixed-term 1-year contract with a 6-month probation clause, signed by handwritten signature** (no e-signature) (OPQ-6; CRR §9).
+- **[RESOLVED]** **Contract expiry/renewal length:** **1 year initial, extendable by 1 additional year, permanent (open-ended) after 2 years** (OPQ-7; CRR §9).
+
+### 6.6 Pool/Claim Hiring Mechanism
 
 **Definition:** A shared-inbox workflow where completed applications appear for all Hotel Group managers; the first manager to open it "claims" it, preventing duplicate simultaneous review.
 
@@ -190,7 +206,7 @@ The module is responsible for:
 - **Actions:** The claiming manager approves or rejects.
 - **No simultaneous review:** The lock prevents two managers from reviewing the same application at the same time.
 
-### 6.6 Hire Approval Decision
+### 6.7 Hire Approval Decision
 
 **Definition:** A manager's judgment decision on whether to approve or reject a new hire.
 
@@ -210,15 +226,16 @@ The onboarding lifecycle progresses through the following states:
 3. **Personalfragebogen completed** — Form submitted.
 4. **Document collection in progress** — Chatbot guides worker through required documents.
 5. **Documents collected** — All required documents uploaded (or worker exempted due to EU status).
-6. **Contract presented** — Contract template shown to worker.
-7. **Contract signed** — Worker has signed contract via QES; account is now activated.
-8. **Awaiting manager review** — Onboarding signals completion; Employee Management transitions the employee record from **Inactive** to **Under Review** (EM §7, §14). The application appears in the pool for manager claiming.
-9. **Under manager review** — Manager has claimed the application and is reviewing.
-10. **Approved** — Manager approves; Employee Management transitions the employee record from **Under Review** to **Active** (EM §14).
-11. **Rejected** — Manager rejects; Employee Management transitions the employee record from **Under Review** to **Rejected** (EM §14); worker is notified; application is archived.
-12. **Onboarding complete** — For an approved hire, the employee record is now **Active** in Employee Management and Onboarding's involvement ends; the record continues under the Employee Management lifecycle thereafter (EM §7 Employee Lifecycle; §8 Employee Status Model).
+6. **Familiarization period** — Optional trial work of **at most two trial days** for mutual suitability; a contract is concluded only if both parties agree afterward (CRR §9). This step precedes contract conclusion.
+7. **Contract generated & presented** — A pre-filled contract PDF (incl. 1-year fixed term and 6-month probation clause) is generated from Personalfragebogen data and made available to download/print for hand signing.
+8. **Contract signed & confirmed** — Both parties sign the paper contract by hand, in person; the scan is uploaded (stored in S3 (EU)) and the **manager marks it "signed & valid."** Account is now activated and the 1-year expiry clock starts. Until this point the contract carries a **"contract pending signature"** status.
+9. **Awaiting manager review** — Onboarding signals completion; Employee Management transitions the employee record from **Inactive** to **Under Review** (EM §7, §14). The application appears in the pool for manager claiming.
+10. **Under manager review** — Manager has claimed the application and is reviewing.
+11. **Approved** — Manager approves; Employee Management transitions the employee record from **Under Review** to **Active** (EM §14).
+12. **Rejected** — Manager rejects; Employee Management transitions the employee record from **Under Review** to **Rejected** (EM §14); worker is notified; application is archived.
+13. **Onboarding complete** — For an approved hire, the employee record is now **Active** in Employee Management and Onboarding's involvement ends; the record continues under the Employee Management lifecycle thereafter (EM §7 Employee Lifecycle; §8 Employee Status Model).
 
-**Account activation gate:** States 1–7 result in an activated platform account. Account is **blocked** until state 7 is reached (CRR §8).
+**Account activation gate:** States 1–8 result in an activated platform account. Account is **blocked** until state 8 is reached — i.e., until a contract file is uploaded AND the manager marks it signed & valid (CRR §8, §9).
 
 ## 8. State Transitions
 
@@ -229,9 +246,11 @@ Signup initiated → Personalfragebogen in progress
 Personalfragebogen in progress → Personalfragebogen completed
 Personalfragebogen completed → Document collection in progress
 Document collection in progress → Documents collected
-Documents collected → Contract presented
-Contract presented → Contract signed
-Contract signed → Awaiting manager review
+Documents collected → Familiarization period
+Documents collected → Contract generated & presented   (familiarization is optional and may be skipped)
+Familiarization period → Contract generated & presented
+Contract generated & presented → Contract signed & confirmed
+Contract signed & confirmed → Awaiting manager review
 Awaiting manager review → Under manager review
 Under manager review → Approved   (Employee Management: Under Review → Active)
 Under manager review → Rejected   (Employee Management: Under Review → Rejected)
@@ -272,8 +291,8 @@ Onboarding produces the following events for consumption by other modules:
    - Payload: Worker ID, document list, exemption status if applicable.
    - Consumers: Audit, Documents module (for validation).
 
-4. **`ContractSigned`** — Worker has signed the contract via QES.
-   - Payload: Worker ID, contract signature timestamp, QES provider reference.
+4. **`ContractSigned`** — The manager has uploaded the scanned signed paper contract and marked it "signed & valid" (the account activates and the 1-year expiry clock starts).
+   - Payload: Worker ID, Manager ID, confirmation timestamp, reference to the scanned signed contract stored in S3 (EU).
    - Consumers: Audit, Contracts module.
 
 5. **`ApplicationReadyForReview`** — Completed application (Personalfragebogen + documents + contract signed) is now in the pool.
@@ -317,7 +336,7 @@ Onboarding consumes events from other modules:
 - Script injection / XSS attempts.
 - File-type uploads outside the expected set (chatbot should only accept document uploads, not executable files).
 
-**Contract signing:** QES signature is captured by the QES provider; Onboarding stores only the provider reference and signature timestamp, not signature material itself (that is owned by Contracts module).
+**Contract signing:** The contract is signed **by hand on paper**, not electronically; there is no e-signature provider. The scanned signed contract is stored in **S3 (EU)** and owned by the Contracts module; Onboarding records only the manager's "signed & valid" confirmation (Manager ID, timestamp) and a reference to the stored scan. The system does not capture, verify, or auto-detect the handwritten signature.
 
 **Manager access control:** Pool/claim interface requires Hotel Manager role or above. The pool is scoped to the manager's Hotel Group (Hotel Manager sees only their hotel; Regional Manager sees all hotels in their group).
 
@@ -339,9 +358,9 @@ Onboarding consumes events from other modules:
 
 **Document storage:** Documents are stored by the Documents module; Onboarding maintains only references to them. Documents follow CRR §25 retention tiers.
 
-**Contract:** Signed contract (with QES reference) is owned by Contracts module; Onboarding maintains only a reference.
+**Contract:** The scanned hand-signed contract (stored in S3 (EU)) is owned by the Contracts module; Onboarding maintains only a reference plus the manager's "signed & valid" confirmation.
 
-**Audit trail:** All Onboarding actions (form submission, document upload, claiming, approval/rejection) are logged for audit and dispute resolution (CRR §26).
+**Audit trail:** All Onboarding actions (form submission, document upload, claiming, approval/rejection) are logged for audit and dispute resolution (CRR §30).
 
 ## 14. Audit & Compliance
 
@@ -352,7 +371,7 @@ Every Onboarding action produces an audit log entry:
 - Each document uploaded (timestamp, document type, file hash [OPEN]).
 - Chatbot conversation started/ended (timestamp, [OPEN] conversation transcript retention).
 - Contract presented (timestamp).
-- Contract signed (timestamp, QES provider, signature reference).
+- Contract generated (timestamp) and manager confirmation "signed & valid" (timestamp, manager ID, reference to scanned signed contract in S3 (EU)).
 - Application entered pool (timestamp).
 - Application claimed by manager (timestamp, manager ID).
 - Application approved (timestamp, manager ID, decision narrative [OPEN]).
@@ -384,10 +403,10 @@ Every Onboarding action produces an audit log entry:
 
 ### 15.3 Contract Signing Validation
 
-- **Contract loaded:** Worker can load contract and review it.
-- **Signature request:** Worker initiates signature request; QES provider integration is triggered.
-- **Signature completion:** QES provider confirms signature completion (or failure); Onboarding records outcome.
-- **Missing contract:** If worker declines to sign, account remains inactive; application does not proceed to pool.
+- **Contract generated:** The pre-filled contract PDF is generated from Personalfragebogen data and made available to download/print for review.
+- **Scan upload:** After both parties sign on paper, the signed contract scan is uploaded and stored in S3 (EU); a contract file must be present before it can be confirmed.
+- **Manager confirmation:** The manager marks the uploaded contract "signed & valid"; only then does the account activate. Until then the contract carries a "contract pending signature" status.
+- **Missing/unsigned contract:** If no signed contract scan is uploaded and confirmed, the account remains inactive and the application does not proceed to pool.
 
 ### 15.4 Pool/Claim Validation
 
@@ -411,16 +430,16 @@ Every Onboarding action produces an audit log entry:
 
 **Recovery:** No error message shown; seamless transition to fallback.
 
-### 16.2 QES Provider Unavailable
+### 16.2 Contract Scan Upload Fails
 
-**Scenario:** Worker attempts to sign contract; QES provider (Skribble, etc.) is temporarily down.
+**Scenario:** The manager attempts to upload the scanned/photographed signed paper contract, but the upload to S3 (EU) fails (network error, storage error, or the file is rejected as an unsupported type).
 
 **Behavior:**
-- User is shown "Signature service temporarily unavailable; please try again in a moment."
-- Onboarding retains contract-signing state; worker can retry within [OPEN] retry window (OPQ-8).
-- Account remains inactive until signature succeeds.
+- The manager is shown "Contract upload failed; please try again in a moment."
+- Onboarding retains the contract-pending state; the manager can retry the upload within [OPEN] retry window (OPQ-8).
+- Account remains inactive until a contract file is uploaded AND marked "signed & valid."
 
-**Recovery:** [OPEN] Whether system automatically retries, or user must manually retry (OPQ-8).
+**Recovery:** [OPEN] Whether the upload auto-retries, or the manager must manually re-upload (OPQ-8).
 
 ### 16.3 Manager Claims, Then Logs Out
 
@@ -473,11 +492,11 @@ Onboarding may contain a GDPR consent gate (e.g., data-processing consent for ch
 1. **Authentication:** Login, account creation, password reset, MFA (CRR §2).
 2. **Employee Management:** Owns the employee record and lifecycle — creates the Inactive record at signup and transitions it (Inactive → Under Review → Active/Rejected) in response to Onboarding's completion signal and approval/rejection decisions (CRR §6–§10; EM §7, §14).
 3. **Documents:** Stores uploaded documents; validates non-EU work-permit requirements (CRR §7).
-4. **Contracts:** Manages contract template, versioning, and storage (CRR §9).
+4. **Contracts/HR:** Manages the contract template and versioning, stores the manager-confirmed hand-signed contract, and owns the ongoing contract lifecycle (expiry at 1yr → optional +1yr with no new probation → permanent after 2yr) and expiry reminders (CRR §9; PDD §5.6, §7.7).
 5. **Compliance:** Owns data retention, consent governance, and special-category handling; Onboarding defers to it (CRR §25–§27).
 6. **Hotels:** Hotel Group context for pool/claim scope (managers see applications for their Hotel Group) (CRR §11).
 7. **Claude API:** Powers the document-collection chatbot and subject-rights agent (CRR §8; PDD §4.14, §7.1).
-8. **QES Provider (Skribble/Yousign/sproof):** Signs contracts on worker's behalf (CRR §9; PDD §5.2, §7.1).
+8. **S3 (EU) storage:** Holds uploaded documents and the scanned hand-signed contract; no data leaves the EU/EEA (storage owned by the Documents/Contracts module) (CRR §9; PDD §5.7).
 9. **Notifications:** Sends notifications to managers and workers (application ready, approval, rejection) (CRR §18).
 
 **Outbound dependencies** (modules that consume Onboarding):
@@ -530,19 +549,17 @@ The following genuine unknowns are unresolved and will block final implementatio
 - Can worker resume from where they left off?
 - Impacts: Worker UX; data-loss prevention.
 
-**OPQ-6: Probation legal shape (fixed-term trial vs. permanent with clause)**
-- Determines whether QES is mandatory from day one.
-- Also impacts Employee Management §8 (Employee Status Model, probation milestone); aligns with EM §26 OPQ-1 (probation legal shape).
-- Impacts: Contract design; signature requirement; legal compliance.
+**OPQ-6: Probation legal shape** `[RESOLVED]`
+- Resolved: the initial contract is a **fixed-term 1-year contract with a 6-month probation clause, signed by handwritten (wet-ink) signature** (no e-signature) (CRR §9).
+- Aligns with EM §26 OPQ-1 (probation legal shape). Probation remains a manual manager marking, not a distinct automated status.
 
-**OPQ-7: Contract expiry/renewal length**
-- Client confirmed contracts expire; duration not yet specified.
-- Impacts: Employment record design; lifecycle auto-graduation; contract-renewal workflow.
+**OPQ-7: Contract expiry/renewal length** `[RESOLVED]`
+- Resolved: **1 year initial, extendable by 1 additional year (no new probation), permanent (open-ended) after 2 years** of successful employment (CRR §9). Expiry reminders are owned by the Contracts/HR module.
 
-**OPQ-8: QES provider retry policy**
-- On provider timeout, does system auto-retry, or does user manually retry?
+**OPQ-8: Contract scan upload retry policy**
+- On upload failure of the scanned signed contract, does the system auto-retry, or does the manager manually re-upload?
 - Retry window / backoff strategy?
-- Impacts: User UX; error handling.
+- Impacts: Manager UX; error handling.
 
 **OPQ-9: Manager-claimed application expiry**
 - If manager claims an application but never approves/rejects, does the claim auto-release after a duration?
@@ -575,7 +592,7 @@ The following genuine unknowns are unresolved and will block final implementatio
 
 - **Self-service Personalfragebogen only:** Worker fills form themselves; no manager entry or PDF-upload-after-the-fact.
 - **Chatbot with cost controls:** AI-guided document collection with hard budget caps and fallback.
-- **QES mandatory:** Contract is legally binding only with Qualified Electronic Signature.
+- **Hand-signed, manager-confirmed contract:** The contract is signed by hand on paper (wet-ink); the manager uploads the scan and marks it "signed & valid," which activates the account. There is no e-signature integration.
 - **Pool/claim mechanism:** Prevents duplicate simultaneous review; simple, auditable, no auto-assignment logic.
 - **Manual approval, no automation:** Probation suitability is purely manager judgment; no rating thresholds or system gates.
 - **No re-application logic:** Rejected workers must explicitly re-signup (may be relaxed in future phases).
@@ -597,13 +614,13 @@ The runtime event exchange is **bidirectional**: Employee Management publishes `
 |--------|-----------|--------|
 | Employee Management | §6–§10 (employee lifecycle) | EM owns the employee record (created Inactive at signup) and all lifecycle transitions; Onboarding progresses it and relays approval/rejection |
 | Documents | §7 (work-permit requirement) | Documents module owns document storage, expiry, and the non-EU work-permit requirement/validation |
-| Contracts | §9 (contract template, QES signing) | Contracts module owns contract template, versioning, storage, and QES signing |
+| Contracts/HR | §9 (contract template, hand-signed contract, lifecycle) | Contracts/HR module owns the contract template, versioning, storage of the manager-confirmed hand-signed contract, and the ongoing lifecycle/expiry reminders |
 | Compliance | §13–14, §25–27 (GDPR, audit, retention) | Compliance owns retention policy, consent, special-category handling |
 | Authentication | §9, §5 (login, MFA for managers) | Auth module owns account creation and session management |
 | Hotels | §5, §9, §10 (Hotel Group scope) | Hotels module owns Hotel and Hotel Group records |
 | Notifications | §10 (notifications to managers/workers) | Notifications module owns push delivery |
 | Claude API | §6.3 (chatbot) | Zirove integrates Claude API for document-collection agent |
-| QES Provider | §9 (contract signing) | Skribble (or alternative) provides Qualified Electronic Signature |
+| S3 (EU) storage | §9 (scanned signed contract) | Documents/Contracts module stores uploaded documents and the scanned hand-signed contract in S3 (EU); no data leaves the EU/EEA |
 
 ---
 
